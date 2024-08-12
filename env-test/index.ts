@@ -1,47 +1,59 @@
-const data = {
-  name: 'C4in',
-  age: 18,
-  props: {
-    class: "text",
-    __class__: "className",
-    style: "color: red",
-    onclick: () => alert('FUNCTION')
-  }
+import { DepsMap, EffectFunction } from '../types/watchEffect'
+
+const data: { [index: string | symbol]: any } = {
+  ok: true,
+  text: "TEST"
 }
+let activeEffect: EffectFunction
+const effectBucket: WeakMap<any, DepsMap> = new WeakMap()
 
-const classMap = new Map<string, string>()
-classMap.set("className", "test")
+const refObj = new Proxy(data, {
+	get(target, key) {
+      // console.log(target)
+      track(target, key)
+      return target[key]
+    },
 
-const h = document.querySelector('h1')
-if (h) {
-  h.textContent = data.name
-  // h.style.cssText = style
-  for (const key in data.props) {
-    if (/^on/.test(key)) {
-      document.addEventListener(key.substring(2).toLowerCase(), () => {
-        // data.props[key]()
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-expect-error
-        data.props[key]()
-      })
-    } else if (key === "class") {
-      h.classList.add(data.props[key])
-    } else if (key === "style") {
-      h.style.cssText = data.props[key]
-    } else if (key === "__class__") {
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-expect-error
-      h.classList.add(classMap.get(data.props[key]))
+    set(target, key, newVal) {
+      target[key] = newVal
+      trigger(target, key)
+      return true
     }
+})
+
+export function track(target: any, key: string | symbol) {
+	if (!activeEffect) return target[key]
+
+  let depsMap = effectBucket.get(target)
+
+  if (!depsMap) {
+    effectBucket.set(target, (depsMap = new Map()))
   }
+  let deps = depsMap.get(key)
+  if (!deps) {
+    depsMap.set(key, (deps = new Set()))
+  }
+  deps.add(activeEffect)
 }
 
-// for (let key in data.props) {
-//   if (/^on/.test(key)) {
-//     document.addEventListener(key.substring(2).toLowerCase(), () => {
-//       alert("click")
-//     })
-//   }
-// }
+export function trigger(target: any, key: string | symbol) {
+  const depsMap = effectBucket.get(target)
+    if (!depsMap) { return false }
+    const effects = depsMap.get(key)
+    effects && effects.forEach((fn) => fn())
+}
 
+effect(() => {
+  console.log(refObj.text)
+  document.body.innerText = refObj.ok ? refObj.text : "not"
+})
 
+setTimeout(() => {
+  refObj.text = "PROXIED"
+  console.log(refObj.text)
+}, 1000)
+
+function effect(fn: EffectFunction) {
+  activeEffect = fn
+  fn()
+}

@@ -1,24 +1,58 @@
-/**
- * 数据劫持：递归遍历所有对象
- * @param {Object} data 劫持对象
- *
- * */
+import { DepsMap, EffectFunction } from '../types/watchEffect'
 
-export function dataProxy(data: { [index: string | number | symbol]: unknown }) {
-  Object.keys(data).forEach(key => {
-    let val: unknown = data[key]
-    if (!val || typeof val !== 'object') {
-      return
+const data: { [index: string | symbol]: any } = {
+  text: "TEST"
+}
+let activeEffect: EffectFunction
+const effectBucket: WeakMap<any, DepsMap> = new WeakMap()
+
+const refObj = new Proxy(data, {
+	get(target, key) {
+      console.log(target)
+      track(target, key)
+      return target[key]
+    },
+
+    set(target, key, newVal) {
+      target[key] = newVal
+      trigger(target, key)
+      return true
     }
-    Object.defineProperty(data, key, {
-      get() {
-        return val
-      },
-      set(v: never) {
-        if (v === val) return
-        val = v
-        dataProxy(v)
-      }
-    })
-  })
+})
+
+export function track(target: any, key: string | symbol) {
+	if (!activeEffect) return target[key]
+
+  let depsMap = effectBucket.get(target)
+
+  if (!depsMap) {
+    effectBucket.set(target, (depsMap = new Map()))
+  }
+  let deps = depsMap.get(key)
+  if (!deps) {
+    depsMap.set(key, (deps = new Set()))
+  }
+  deps.add(activeEffect)
+}
+
+export function trigger(target: any, key: string | symbol) {
+  const depsMap = effectBucket.get(target)
+    if (!depsMap) { return false }
+    const effects = depsMap.get(key)
+    effects && effects.forEach((fn) => fn())
+}
+
+effect(() => {
+  console.log(refObj.text)
+  document.body.innerText = refObj.text
+})
+
+setTimeout(() => {
+  refObj.text = "PROXIED"
+  console.log(refObj.text)
+}, 1000)
+
+function effect(fn: EffectFunction) {
+  activeEffect = fn
+  fn()
 }
