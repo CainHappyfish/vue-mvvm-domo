@@ -23,7 +23,6 @@ export function computed<T>(getter: EffectFunction<T>): Computed<T> {
         buffer = effectFn()
         dirty = false
       }
-      console.log("fin", buffer)
       track(obj, "value")
       return buffer
     }
