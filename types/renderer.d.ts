@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-function-type */
-/* eslint-disable @typescript-eslint/no-explicit-any*/
-
 
 export type Renderer = {
   renderer: (vNode: VNode, container: Container) => any

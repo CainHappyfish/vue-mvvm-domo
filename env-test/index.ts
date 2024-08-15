@@ -1,59 +1,34 @@
-import { DepsMap, EffectFunction } from '../types/watchEffect'
+import { reactive } from '../src/reactivity/reactive'
+import { watchEffect } from '../src/core'
+import { computed } from '../src/reactivity/computed'
 
-const data: { [index: string | symbol]: any } = {
-  ok: true,
-  text: "TEST"
+const obj = {
+  text: "name",
+  foo: 2,
+  bar: 4,
 }
-let activeEffect: EffectFunction
-const effectBucket: WeakMap<any, DepsMap> = new WeakMap()
 
-const refObj = new Proxy(data, {
-	get(target, key) {
-      // console.log(target)
-      track(target, key)
-      return target[key]
-    },
+const data = reactive(obj)
 
-    set(target, key, newVal) {
-      target[key] = newVal
-      trigger(target, key)
-      return true
-    }
-})
+const sum = computed(() => data.foo + data.bar)
 
-export function track(target: any, key: string | symbol) {
-	if (!activeEffect) return target[key]
+// console.log(data)
 
-  let depsMap = effectBucket.get(target)
-
-  if (!depsMap) {
-    effectBucket.set(target, (depsMap = new Map()))
+watchEffect(() => {
+  // document.body.innerText = data.text
+  const foo = document.querySelector('.foo') as HTMLElement
+  const bar = document.querySelector('.bar') as HTMLElement
+  const result = document.querySelector('.sum') as HTMLElement
+  if (foo && bar && result) {
+    foo.innerText = data.foo
+    bar.innerText = data.bar
+    result.innerText = sum.value
   }
-  let deps = depsMap.get(key)
-  if (!deps) {
-    depsMap.set(key, (deps = new Set()))
-  }
-  deps.add(activeEffect)
-}
-
-export function trigger(target: any, key: string | symbol) {
-  const depsMap = effectBucket.get(target)
-    if (!depsMap) { return false }
-    const effects = depsMap.get(key)
-    effects && effects.forEach((fn) => fn())
-}
-
-effect(() => {
-  console.log(refObj.text)
-  document.body.innerText = refObj.ok ? refObj.text : "not"
 })
 
 setTimeout(() => {
-  refObj.text = "PROXIED"
-  console.log(refObj.text)
-}, 1000)
-
-function effect(fn: EffectFunction) {
-  activeEffect = fn
-  fn()
-}
+  // data.text = "C4iN"
+  data.foo = 3
+  data.bar = 6
+  // console.log(sum)
+},1000)
