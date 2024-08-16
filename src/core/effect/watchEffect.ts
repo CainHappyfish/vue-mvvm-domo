@@ -7,6 +7,7 @@ const effectBucket: WeakMap<any, DepsMap> = new WeakMap<any, DepsMap>()
 const effectStack: Array<EffectFunction> = new Array<EffectFunction>()
 // 循环副作用标记
 const iterateBucket: WeakMap<any, any> = new WeakMap<any, any>()
+
 let activeEffect: EffectFunction
 // 操作类型
 const TriggerType = {
@@ -14,6 +15,7 @@ const TriggerType = {
   ADD: 'ADD',
   DELETE: 'DELETE'
 }
+
 
 /**
  * watchEffect: 监听副作用
@@ -49,9 +51,10 @@ export function watchEffect(fn: EffectFunction, options: EffectOptions = {}): Ef
  * @param {any} target - 追踪数据
  * @param {string | symbol} key - 发生变化的键值
  * @param {string} type - 操作类型
+ * @param {boolean} shouldTrack - 是否追踪
  * */
-export function track(target: any, key: string | symbol, type?: string) {
-	if (!activeEffect) {
+export function track(target: any, key: string | symbol, type?: string, shouldTrack: boolean = true) {
+	if (!activeEffect || !shouldTrack) {
     return
   }
 
@@ -82,8 +85,9 @@ export function track(target: any, key: string | symbol, type?: string) {
  * @param {any} target - 触发对象
  * @param {string | symbol} key - 发生变化的键值
  * @param {string} type - 操作类型
+ * @param {number} newVal - 新的数组索引
  * */
-export function trigger(target: any, key: string | symbol, type: string) {
+export function trigger(target: any, key: string | symbol, type: string, newVal?: number | string) {
   const depsMap = effectBucket.get(target)
   if (!depsMap) { return false }
   // 获取与key相关联的所有副作用
@@ -111,6 +115,29 @@ export function trigger(target: any, key: string | symbol, type: string) {
       }
     })
 
+  }
+
+  // 对象是数组，且增加了数组元素
+  if (type === TriggerType.ADD && Array.isArray(target)) {
+    const lengthEffects = depsMap.get("length")
+    lengthEffects && lengthEffects.forEach((effectFn) => {
+      if (effectFn !== activeEffect) {
+        effectsToRun.add(effectFn)
+      }
+    })
+  }
+
+  // 对象是数组，且修改了length属性
+  if (key === "length" && Array.isArray(target) && newVal) {
+    depsMap.forEach((effects, key) => {
+      if (key.toString() >= newVal) {
+        effects.forEach(effectFn => {
+          if (effectFn !== activeEffect) {
+            effectsToRun.add(effectFn)
+          }
+        })
+      }
+    })
   }
 
   effectsToRun.forEach((effectFn) => {
