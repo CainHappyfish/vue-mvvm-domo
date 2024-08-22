@@ -23,6 +23,7 @@ const TriggerType = {
  * @param {EffectOptions} options - 副作用函数选项，默认为空
  * */
 export function watchEffect(fn: EffectFunction, options: EffectOptions = {}): EffectFunction {
+  // console.log("watchEffect", fn)
   const effectFn: EffectFunction = () => {
     // 清楚不需要的副作用
     cleanup(effectFn)
@@ -31,8 +32,9 @@ export function watchEffect(fn: EffectFunction, options: EffectOptions = {}): Ef
     // 手动执行副作用函数可以拿到返回值
     const res = fn()
     effectStack.pop()
+    // console.log("activeEffect", activeEffect)
     activeEffect = effectStack[effectStack.length - 1]
-
+    // console.log("activeEffect", activeEffect)
     return res
   }
 
@@ -50,15 +52,21 @@ export function watchEffect(fn: EffectFunction, options: EffectOptions = {}): Ef
  * track：追踪响应式数据变化，收集副作用
  * @param {any} target - 追踪数据
  * @param {string | symbol} key - 发生变化的键值
- * @param {string} type - 操作类型
+ * @param {string} type - 操作类型，SP为Set和Map操作
  * @param {boolean} shouldTrack - 是否追踪
  * */
 export function track(target: any, key: string | symbol, type?: string, shouldTrack: boolean = true) {
-	if (!activeEffect || !shouldTrack) {
+  // console.log("effects", activeEffect)
+  // console.log(target)
+  // console.log(effectBucket)
+  // console.log("key: ", key, "type: ", type)
+  if (!activeEffect || !shouldTrack) {
+    console.warn("Effect not active", target, key, type)
     return
   }
+  // console.warn("success", target, key, type)
 
-  if (type === "ADD" || type === "DELETE") {
+  if (type === "ADD" || type === "DELETE" || type === "SIZE") {
     iterateBucket.set(target, key)
   }
 
@@ -104,8 +112,12 @@ export function trigger(target: any, key: string | symbol, type: string, newVal?
   })
 
   // 添加/删除属性
-  if (type === TriggerType.ADD || type === TriggerType.DELETE) {
+  if (type === TriggerType.ADD || type === TriggerType.DELETE ||
+    // 如果操作类型为SET且目标对象为MAP也应触发ITERATE_KEY对应操作
+      type === "SET" && Object.prototype.toString.call(target) === "[Object Map]"
+  ) {
     const ITERATE_KEY = iterateBucket.get(target)
+    // console.log("iterate", iterateBucket)
     // 获取与 ITERATE_KEY相关联的副作用函数
     const iterateEffects = depsMap.get(ITERATE_KEY)
 

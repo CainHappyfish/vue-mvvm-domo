@@ -1,4 +1,5 @@
-import { Container, VNode } from '../../types/renderer'
+import { Container, Renderer, VNode } from '../../types/renderer'
+import { patch, unmount } from './patch'
 
 /**
  * 根据组件虚拟 DOM 树构建真实的 DOM 树
@@ -10,3 +11,24 @@ export function renderer(vnode: VNode, container: Container) {
 
 }
 
+
+export function createRenderer(): Renderer {
+  function render(vnode: VNode, container: Container) {
+    if (vnode) {
+      // 新 vnode 存在，将其与旧 vnode 一起传递给 patch 函数
+      patch(container._vnode, vnode, container)
+    } else {
+      if (container._vnode) {
+        // 旧 vnode 存在，且新 vnode 不存在，说明是卸载（unmount）操作
+        // 只需要将 container 内的 DOM 清空即可
+        unmount(vnode)
+      }
+    }
+
+    container._vnode = vnode
+  }
+
+  return {
+    render
+  }
+}

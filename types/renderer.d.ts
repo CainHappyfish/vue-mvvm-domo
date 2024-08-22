@@ -1,6 +1,6 @@
 
 export type Renderer = {
-  renderer: (vNode: VNode, container: Container) => any
+  render: (vNode: VNode, container: Container) => any
 }
 // export function renderer: (vNode: VNode, container: Container) => unknown
 
@@ -26,7 +26,14 @@ export interface VNode {
  * 用于存储元素的容器
  * */
 export interface Container extends HTMLElement {
+  /**
+   * _vnode：当前DOM容器中的根虚拟节点
+   * */
   _vnode?: VNode,
+  /**
+   * _invokers：存放所有事件处理函数，键是事件名称，它的
+   * 值则是对应的事件处理函数
+   * */
   _invokers?: {[index: string]: Invoker}
 }
 
@@ -34,7 +41,16 @@ export interface Container extends HTMLElement {
  * 处理事件函数
  * */
 export interface Invoker extends Function {
-  (event: Event): unknown | void,
-  value?: (event: Event) => unknown | void,
+  /**
+   * (event: Event): 需要执行监听的事件
+   * */
+  (event: Event): any,
+  /**
+   * value: 存储监听的事件，可选
+   * */
+  value?: (event: Event) => any,
+  /**
+   * attachTime: 事件处理函数绑定时间，可选
+   * */
   attachTime?: number
 }

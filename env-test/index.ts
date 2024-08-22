@@ -1,12 +1,9 @@
-import { reactive } from '../src/reactivity/reactive'
-import { watchEffect } from '../src/core'
+import { normalizeClass } from '../src/renderer/props'
 
-const arr = reactive([])
+const className = [
+  'class1',
+  {class2 : true}
+]
 
-watchEffect(() => {
-    arr.push(1)
-})
 
-watchEffect(() => {
-    arr.push(1)
-})
+console.log(normalizeClass(className))

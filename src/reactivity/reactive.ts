@@ -1,26 +1,23 @@
 import { trigger, track } from '../core'
+import { iterationMethod, keysIterationMethod, valuesIterationMethod } from './utils/instrumentation'
 
 const reactiveMap = new Map()
-export function reactive(data: {[key: string | symbol]: any}) {
-  const existedProxy = reactiveMap.get(data)
-  if (existedProxy) {
-    return existedProxy
-  }
-  const proxy = createReactive(data)
-  reactiveMap.set(data, proxy)
-  return proxy
-}
 
 // 查找方法
-const Methods =  ["includes", "indexOf", "lastIndexOf"]
-// 追踪方法
-const trackMethods = ["push", "pop", "shift", "unshift", "splice"]
+const searchMethods =  ["includes", "indexOf", "lastIndexOf"]
+// 栈方法
+const stackMethods = ["push", "pop", "shift", "unshift", "splice"]
 // 追踪标记
 let shouldTrack = true
 // 重写方法数组
 const arrayInstrumentation: {[index: string]: any} = {}
+// Set, Map方法
+const setMethods = ["add", "delete", "set", "get"]
+// 操作独立标记
+const ITERATE_KEY = Symbol()
 
-trackMethods.forEach((method: any) => {
+// 追踪方法处理
+stackMethods.forEach((method: any) => {
   const originMethod = Array.prototype[method]
 
   arrayInstrumentation[method] = function(...args: any): any {
@@ -31,7 +28,8 @@ trackMethods.forEach((method: any) => {
   }
 })
 
-Methods.forEach((method: any) => {
+// 查找方法处理
+searchMethods.forEach((method: any) => {
   const originMethod = Array.prototype[method]
 
   arrayInstrumentation[method] = function(...args: any): any {
@@ -46,20 +44,82 @@ Methods.forEach((method: any) => {
 
 })
 
-export function shallowReactive(data: {[key: string | symbol]: any}) {
-  return createReactive(data, true)
-}
+// Set Map交互操作处理
+const mutableInstrumentation: {[index: string | symbol]: any} = {
 
-export function readonly(data: {[key: string | symbol]: any}) {
-  return createReactive(data, false, true)
-}
+  add(key: string | symbol): any {
+    // this指向代理对象，获取原始对象
+    const target = this.raw
+    // 判断值是否存在
+    const hadKey = target.has(key)
+    const res = target.add(key)
 
-export function shallowReadonly(data: {[key: string | symbol]: any}) {
-  return createReactive(data, true, true)
+    if (!hadKey) {
+      trigger(target, key, "ADD")
+    }
+    return res
+  },
+
+  delete(key: string | symbol): any {
+    const target = this.raw
+    // 判断值是否存在
+    const hadKey = target.has(key)
+    const res = target.delete(key)
+
+    if (hadKey) {
+      trigger(target, key, "DELETE")
+    }
+    return res
+  },
+
+  get(key: any) {
+    const target = this.raw
+    const hadKey = target.has(key)
+    track(target, key)
+
+    if (hadKey) {
+      const result = target.get(key)
+      return typeof result === "object" ? reactive(result) : result
+    }
+  },
+
+  set(key: any, value: any) {
+    const target = this.raw
+    const hadKey = target.has(key)
+
+    const oldVal = target.get(key)
+
+    // 获取原始数据
+    const rawVal = value.raw || value
+    target.set(key, rawVal)
+
+    if (!hadKey) {
+      trigger(target, key, "ADD")
+    } else if (oldVal !== value && (oldVal === oldVal || value === value)) {
+      trigger(target, key, "SET")
+    }
+
+  },
+
+  forEach(callback: Function, thisArg?: any) {
+    // wrap用于包装响应式数据
+    const wrap = (val: any) => typeof val === 'object' && val !== null ? reactive(val) : val
+    const target = this.raw
+    // forEach遍历也和size有关，用size打标记
+    track(target, ITERATE_KEY, "SIZE")
+
+    target.forEach((v: any, k: any) => {
+      callback.call(thisArg, wrap(v), wrap(k), this)
+    })
+  },
+
+  [Symbol.iterator]: iterationMethod,
+  entries: iterationMethod,
+  values: valuesIterationMethod,
+  keys: keysIterationMethod
 }
 
 function createReactive(data: {[key: string | symbol]: any}, isShallow = false, isReadonly = false): any {
-  const ITERATE_KEY = Symbol()
   return new Proxy(data, {
     // 读取操作
     get(target, key: string | symbol, receiver: any) {
@@ -67,20 +127,36 @@ function createReactive(data: {[key: string | symbol]: any}, isShallow = false, 
         return target
       }
 
-      // 拦截代理操作
+      // 处理Set和Map的size读取
+      if (key === "size") {
+        track(target, ITERATE_KEY, "SIZE")
+        return Reflect.get(target, key, target)
+      }
+
+      // 拦截查找操作
       if (Array.isArray(target) && arrayInstrumentation.hasOwnProperty(key)) {
         return Reflect.get(arrayInstrumentation, key, receiver)
       }
 
       // 如果 key 的类型是 symbol，则不进行追踪
-      if (!isReadonly && typeof key !== "symbol") {
+      if (!isReadonly && typeof key !== "symbol" && !setMethods.includes(key)) {
         track(target, key, "GET", shouldTrack)
       }
 
-      const res = Reflect.get(target, key, receiver)
+      // 处理Set或Map的操作
+      let res = Reflect.get(target, key, receiver)
+      if (typeof key === "string" && setMethods.includes(key) || Symbol.iterator in target) {
+        // track(target, ITERATE_KEY, "ADD") 不需要
+        // console.log("target: ", target, "key: ",key)
+
+        return mutableInstrumentation[key]
+      }
+
+
       if (typeof res !== null && typeof res === "object") {
         return isReadonly? readonly(res) : reactive(res)
       }
+
       return res
     },
 
@@ -105,7 +181,7 @@ function createReactive(data: {[key: string | symbol]: any}, isShallow = false, 
       }
 
       if (receiver.raw === target) {
-        if (oldVal !== newVal && (oldVal === newVal || oldVal === newVal)) {
+        if (oldVal !== newVal && (oldVal === oldVal || newVal === newVal)) {
           // 传递新的length值
           trigger(target, key, type, newVal)
 
@@ -147,4 +223,26 @@ function createReactive(data: {[key: string | symbol]: any}, isShallow = false, 
 
 
   })
+}
+
+export function reactive<T extends {[key: string | symbol]: any}>(data: T): T {
+  const existedProxy = reactiveMap.get(data)
+  if (existedProxy) {
+    return existedProxy
+  }
+  const proxy = createReactive(data)
+  reactiveMap.set(data, proxy)
+  return proxy
+}
+
+export function shallowReactive(data: {[key: string | symbol]: any}) {
+  return createReactive(data, true)
+}
+
+export function readonly(data: {[key: string | symbol]: any}) {
+  return createReactive(data, false, true)
+}
+
+export function shallowReadonly(data: {[key: string | symbol]: any}) {
+  return createReactive(data, true, true)
 }
