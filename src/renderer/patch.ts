@@ -150,103 +150,9 @@ export function patchChild(oldNode: VNode, newNode: VNode, el: Container) {
     el.textContent = newNode.children
   } else if (Array.isArray(newNode.children)) {
     /* 新子节点是一组子节点 */
+    patchKeyedChildren(oldNode, newNode, el)
 
-    // 获取新旧子节点组的信息
-    const oldChildren = oldNode.children
-    const newChildren = newNode.children
 
-    const oldLen = oldChildren.length
-    const newLen = newChildren.length
-
-    // 获得新旧子节点组的共同长度
-    const commonLength = Math.min(oldLen, newLen)
-
-    // 遍历新旧节点，找出key相同的子节点
-    // 存储遍历过程中遇到的最大索引
-    let lastIndex = 0
-    for (let i = 0 ; i < newLen; i++) {
-      const newVNode = newChildren[i]
-
-      // 是否在旧子节点组中找到可复用的节点
-      let found = false
-
-      for(let j = 0 ; j < oldLen; j++) {
-        const oldVNode = oldChildren[j]
-        if (newVNode === oldVNode) {
-          // 找到相同节点，则先更新后跳出内循环
-          patch(oldVNode, newVNode, el)
-          if (newVNode.key === oldVNode.key) {
-            found = true
-            patch(oldVNode, newVNode, el)
-            if (j < lastIndex) {
-              // 需要移动，先获取newVNode的前一个节点prevVNode
-              const prevVNode = newChildren[i - 1]
-              // 如果不存在prevNode说明是新子节点组第一个元素，则不需要移动，作为DOM树的第一个子节点来帮助定位
-              if (prevVNode) {
-                // 获取prevVNode对应真实DOM的下一个兄弟节点作为锚点，插入newVNode
-                const anchor = prevVNode.el.nextSibling
-                el.insertBefore(newVNode.el, anchor)
-              }
-
-            } else {
-              // 更新最大索引
-              lastIndex = j
-            }
-            break
-          }
-        }
-
-        // 处理新节点
-        if (!found) {
-          // 同样获取prevVNode对应真实DOM的下一个兄弟节点作为锚点、
-          const prevVNode = newChildren[i - 1]
-          let anchor: ChildNode | null = null
-          if (prevVNode) {
-            anchor = prevVNode.el.nextSibling
-          } else {
-            // 没有prevVNode则说明是第一个节点，用容器元素的第一个子节点作为锚点
-            anchor = el.firstChild
-          }
-          // 挂载
-          patch(undefined, newVNode, el, anchor)
-        }
-      }
-
-      // 遍历旧子节点组删除不需要的节点
-      for (let i = 0; i < oldLen ; i++) {
-        const oldVNode = oldChildren[i] as VNode
-        // 在新的子节点组中寻找相同key的节点
-        const has = newChildren.find(child => child.key === oldVNode.key)
-
-        // 没找到则卸载
-        if (!has) {
-          unmount(oldVNode)
-        }
-      }
-    }
-
-    if (Array.isArray(oldChildren)) {
-      // 遍历commonLength次
-      for (let i = 0; i < commonLength; i++) {
-        patch(oldChildren[i], newChildren[i], el)
-      }
-      /* newLen > oldLen， 需要挂载新子节点 */
-      if (newLen > oldLen) {
-        for (let i = commonLength; i <= newLen; i++) {
-          patch(undefined, newChildren[i], el)
-        }
-      } else if (newLen < newLen) {
-        /* newLen < oldLen， 需要卸载旧子节点 */
-        for (let i = commonLength; i <= oldLen; i++) {
-          unmount(oldChildren[i])
-        }
-      }
-    } else {
-      // 旧节点可能是没有子节点或文本子节点，清空容器并重新挂载新子节点
-      el.textContent = ""
-      newNode.children.forEach((child: VNode) => { patch(undefined, child, el) })
-
-    }
   } else {
     if (Array.isArray(oldNode.children)) {
       // 没有新子节点的情况，直接卸载就可以了
@@ -255,6 +161,100 @@ export function patchChild(oldNode: VNode, newNode: VNode, el: Container) {
       // 文本节点的情况，直接清空
       el.textContent = ""
     }
+  }
+}
+
+function patchKeyedChildren(oldNode: VNode, newNode: VNode, container: Container) {
+  // 获取新旧子节点组的信息
+  const oldChildren = oldNode.children
+  const newChildren = newNode.children
+  // 索引值
+  let oldStartIndex = 0
+  let oldEndIndex = oldChildren.length - 1
+  let newStartIndex = 0
+  let newEndIndex = newChildren.length - 1
+  // 四个索引节点
+  let oldStartNode = oldChildren[oldStartIndex] as VNode
+  let oldEndNode = oldChildren[oldEndIndex] as VNode
+  let newStartNode = newChildren[newStartIndex] as VNode
+  let newEndNode = newChildren[newEndIndex] as VNode
+
+  while (oldStartIndex <= oldEndIndex && newStartIndex <= newEndIndex) {
+    if (oldStartNode.key === newStartNode.key) {
+      // 仍处于头部，只需要更新
+      patch(oldEndNode, newStartNode, container)
+      // 更新完成后更新索引
+      oldEndNode = oldChildren[++oldStartIndex] as VNode
+      newEndNode = newChildren[++newStartIndex] as VNode
+    } else if (oldEndNode.key === newEndNode.key) {
+      // 仍处于末尾，只需要更新
+      patch(oldEndNode, newStartNode, container)
+      // 更新完成后更新索引
+      oldEndNode = oldChildren[--oldEndIndex] as VNode
+      newEndNode = newChildren[--newEndIndex] as VNode
+
+    } else if (oldStartNode.key === newEndNode.key) {
+      // 先更新节点
+      patch(oldEndNode, newStartNode, container)
+      // 移动DOM，将旧头部节点位置移动到旧尾部节点后
+      container.insertBefore(oldStartNode.el, oldEndNode.el.nextSibling)
+
+    } else if (oldEndNode.key === newStartNode.key) {
+      // 先更新节点
+      patch(oldEndNode, newStartNode, container)
+      // 移动DOM，将旧尾部节点位置移动到旧头部节点前
+      container.insertBefore(oldStartNode.el, oldEndNode.el)
+
+      // 移动完成后更新索引
+      oldEndNode = oldChildren[--oldEndIndex] as VNode
+      newStartNode = newChildren[++newStartIndex] as VNode
+
+    } else if (!oldStartNode.key) {
+      // 遇到undefined节点时，跳过
+      oldStartNode = oldChildren[++oldStartIndex] as VNode
+    } else if (!oldEndNode.key) {
+      // 遇到undefined节点时，跳过
+      oldEndNode = oldChildren[--oldEndIndex] as VNode
+    } else {
+      // 遍历旧子节点组，找到与新头部节点相同的子节点的索引
+      if (typeof oldChildren !== 'string') {
+        const indexInOld = oldChildren.findIndex(child => child.key === newStartNode.key)
+
+        // 大于0则说明找到对应节点，将其移动到头部
+        if (indexInOld > 0) {
+          const vnodeToMove = oldChildren[indexInOld]
+          // 更新
+          patch(vnodeToMove, newStartNode, container)
+          // 移动到旧头部节点oldStartNode之前
+          container.insertBefore(vnodeToMove.el, oldStartNode.el)
+          // 设置indexInOld处的节点为undefined，更新索引
+          oldChildren[indexInOld].key = undefined
+          // 更新newStartIndex到下一个位置
+          newStartNode = newChildren[++newStartIndex] as VNode
+
+        } else {
+          // 将新节点挂载到头部
+          patch(undefined, newStartNode, container, oldStartNode.el)
+        }
+
+      } else {
+        console.error("children should be a array.")
+      }
+    }
+
+    // 满足条件则说明遗漏新节点，需要挂载
+    if (oldEndIndex < oldStartIndex && newStartIndex < newEndIndex) {
+      for (let i = newStartIndex; i < newEndIndex; i++) {
+        patch(undefined, newChildren[i] as VNode, container, oldStartNode.el)
+      }
+    } else if (newEndIndex < newStartIndex && oldStartIndex <= oldEndIndex) {
+      // 满足条件则说明存在不需要的节点，需要卸载
+      for (let i = oldStartIndex; i < newEndIndex; i++) {
+        unmount(oldChildren[i] as VNode)
+      }
+    }
+
+
   }
 }
 
