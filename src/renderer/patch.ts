@@ -150,7 +150,7 @@ export function patchChild(oldNode: VNode, newNode: VNode, el: Container) {
     el.textContent = newNode.children
   } else if (Array.isArray(newNode.children)) {
     /* 新子节点是一组子节点 */
-    patchKeyedChildren(oldNode, newNode, el)
+    diff(oldNode, newNode, el)
 
 
   } else {
@@ -164,98 +164,204 @@ export function patchChild(oldNode: VNode, newNode: VNode, el: Container) {
   }
 }
 
-function patchKeyedChildren(oldNode: VNode, newNode: VNode, container: Container) {
-  // 获取新旧子节点组的信息
+function diff(oldNode: VNode, newNode: VNode, container: Container) {
   const oldChildren = oldNode.children
   const newChildren = newNode.children
-  // 索引值
-  let oldStartIndex = 0
+
+  // 处理相同前置节点，索引startIndex指向新旧两组子节点的开头
+  let startIndex = 0
+  let oldVNode = oldChildren[startIndex] as VNode
+  let newVNode = newChildren[startIndex] as VNode
+
+  /* 预处理 */
+  // while循环向后遍历，直到不同key值的节点
+  while (oldVNode.key === newVNode.key) {
+    // 先更新
+    patch(oldVNode, newVNode, container)
+    // 更新索引j，让其递增
+    startIndex++
+    oldVNode = oldChildren[startIndex] as VNode
+    newVNode = newChildren[startIndex] as VNode
+  }
+
+  // 处理相同的后置节点，newEndIndex指向新子节点组的尾部，oldEndIndex指向旧子节点组的尾部
   let oldEndIndex = oldChildren.length - 1
-  let newStartIndex = 0
   let newEndIndex = newChildren.length - 1
-  // 四个索引节点
-  let oldStartNode = oldChildren[oldStartIndex] as VNode
-  let oldEndNode = oldChildren[oldEndIndex] as VNode
-  let newStartNode = newChildren[newStartIndex] as VNode
-  let newEndNode = newChildren[newEndIndex] as VNode
 
-  while (oldStartIndex <= oldEndIndex && newStartIndex <= newEndIndex) {
-    if (oldStartNode.key === newStartNode.key) {
-      // 仍处于头部，只需要更新
-      patch(oldEndNode, newStartNode, container)
-      // 更新完成后更新索引
-      oldEndNode = oldChildren[++oldStartIndex] as VNode
-      newEndNode = newChildren[++newStartIndex] as VNode
-    } else if (oldEndNode.key === newEndNode.key) {
-      // 仍处于末尾，只需要更新
-      patch(oldEndNode, newStartNode, container)
-      // 更新完成后更新索引
-      oldEndNode = oldChildren[--oldEndIndex] as VNode
-      newEndNode = newChildren[--newEndIndex] as VNode
+  oldVNode = oldChildren[oldEndIndex] as VNode
+  newVNode = newChildren[newEndIndex] as VNode
 
-    } else if (oldStartNode.key === newEndNode.key) {
-      // 先更新节点
-      patch(oldEndNode, newStartNode, container)
-      // 移动DOM，将旧头部节点位置移动到旧尾部节点后
-      container.insertBefore(oldStartNode.el, oldEndNode.el.nextSibling)
+  // while循环向前遍历，直到不同key值的节点
+  while(oldVNode.key === newVNode.key) {
+    // 更新
+    patch(oldVNode, newVNode, container)
+    // 递减索引
+    oldVNode = oldChildren[--oldEndIndex] as VNode
+    newVNode = newChildren[--newEndIndex] as VNode
+  }
 
-    } else if (oldEndNode.key === newStartNode.key) {
-      // 先更新节点
-      patch(oldEndNode, newStartNode, container)
-      // 移动DOM，将旧尾部节点位置移动到旧头部节点前
-      container.insertBefore(oldStartNode.el, oldEndNode.el)
+  /* 处理新增节点 */
+  if (startIndex > oldEndIndex && startIndex <= newEndIndex) {
+    // 获取锚点
+    const anchorIndex = newEndIndex + 1
+    const anchor = anchorIndex < newEndIndex ? (newChildren[anchorIndex] as VNode).el : null
+    // 挂载每个新增节点
+    for (let i = startIndex; i <= newEndIndex ; i++) {
+      patch(undefined, newChildren[i] as VNode, container, anchor)
+    }
+  } else if (startIndex > newEndIndex && startIndex <= oldEndIndex) {
+    /* 删除节点 */
+    // 删除不需要的节点
+    for (let i = startIndex; i <= oldEndIndex ; i++) {
+      unmount(oldChildren[i] as VNode)
+    }
+  } else {
+    // 构造source数组记录未处理的节点数
+    const count = newEndIndex - startIndex + 1
+    const source = new Array(count)
+    source.fill(-1)
+    // 是否需要移动
+    let moved = false
+    // 当前最大索引值
+    let lastIndex = 0
 
-      // 移动完成后更新索引
-      oldEndNode = oldChildren[--oldEndIndex] as VNode
-      newStartNode = newChildren[++newStartIndex] as VNode
+    // 构建索引表
+    const keyIndex = {}
+    for (let i = startIndex; i <= newEndIndex; i++) {
+      const index = (newChildren[i] as VNode).key as string
+      keyIndex[index] = i
+    }
 
-    } else if (!oldStartNode.key) {
-      // 遇到undefined节点时，跳过
-      oldStartNode = oldChildren[++oldStartIndex] as VNode
-    } else if (!oldEndNode.key) {
-      // 遇到undefined节点时，跳过
-      oldEndNode = oldChildren[--oldEndIndex] as VNode
-    } else {
-      // 遍历旧子节点组，找到与新头部节点相同的子节点的索引
-      if (typeof oldChildren !== 'string') {
-        const indexInOld = oldChildren.findIndex(child => child.key === newStartNode.key)
+    // 记录更新过的节点数
+    let patched = 0
+    // 遍历旧子节点组
+    for (let i = startIndex; i <= oldEndIndex; i++) {
+      const oldVNode = oldChildren[i] as VNode
+      // 通过索引表快速找到有相同key的新子节点
+      if (oldVNode.key && patched <= count) {
+        const j = keyIndex[oldVNode.key]
 
-        // 大于0则说明找到对应节点，将其移动到头部
-        if (indexInOld > 0) {
-          const vnodeToMove = oldChildren[indexInOld]
+        if (typeof j !== 'undefined') {
+          newVNode = newChildren[j] as VNode
           // 更新
-          patch(vnodeToMove, newStartNode, container)
-          // 移动到旧头部节点oldStartNode之前
-          container.insertBefore(vnodeToMove.el, oldStartNode.el)
-          // 设置indexInOld处的节点为undefined，更新索引
-          oldChildren[indexInOld].key = undefined
-          // 更新newStartIndex到下一个位置
-          newStartNode = newChildren[++newStartIndex] as VNode
+          patch(oldVNode, newVNode, container)
+          patched++
+          // 填充source
+          source[j - startIndex] = i
 
+          // 判断是否需要移动
+          if (j < lastIndex) {
+            moved = true
+          } else {
+            lastIndex = j
+          }
         } else {
-          // 将新节点挂载到头部
-          patch(undefined, newStartNode, container, oldStartNode.el)
+          // 未找到则删除节点
+          unmount(oldVNode)
         }
-
       } else {
-        console.error("children should be a array.")
+        unmount(oldVNode)
+
+        if (oldVNode.key) console.error("key doesn't exist.")
       }
+
     }
 
-    // 满足条件则说明遗漏新节点，需要挂载
-    if (oldEndIndex < oldStartIndex && newStartIndex < newEndIndex) {
-      for (let i = newStartIndex; i < newEndIndex; i++) {
-        patch(undefined, newChildren[i] as VNode, container, oldStartNode.el)
-      }
-    } else if (newEndIndex < newStartIndex && oldStartIndex <= oldEndIndex) {
-      // 满足条件则说明存在不需要的节点，需要卸载
-      for (let i = oldStartIndex; i < newEndIndex; i++) {
-        unmount(oldChildren[i] as VNode)
-      }
-    }
+    // 处理节点移动
+    if (moved) {
+      // 计算最长递增子序列
+      const seq = getSequence(source)
 
+      // 指向最长递增子序列末尾
+      let seqEnd = seq.length - 1
+      // 指向未处理的节点组末尾
+      let newEnd = count - 1
+
+      for (let i = newEnd; i >= 0 ; i--) {
+        // 均为新节点，挂载
+        // 在新子节点组中的绝对位置索引，并获取对应的节点
+        const pos = i + startIndex
+        const newVNode = newChildren[pos] as VNode
+        // 该节点的下一个节点的位置索引
+        const nextPos = pos + 1
+        // 获取锚点
+        const anchor = nextPos < newChildren.length
+        ? (newChildren[nextPos] as VNode).el
+        : null
+        if (source[i] === -1) {
+          // 挂载
+          patch(undefined, newVNode, container, anchor)
+        }
+        if (i !== seq[seqEnd]) {
+          // 如果节点的索引 i 不等于 seq[seqEnd] 的值，说明该节点需要移动
+          container.insertBefore(newVNode.el, anchor)
+        } else {
+          // 否则不需要移动， seqEnd指向下一个位置
+          seqEnd--
+        }
+      }
+
+    }
 
   }
+}
+
+
+/**
+ * vue3中求解最长递增子序列函数，返回对于索引值
+ *
+ * */
+function getSequence(arr: Array<any>) {
+  const predecessorIndices = arr.slice(); // 用于记录序列中每个元素的前驱索引
+  const sequenceIndices = [0]; // 用于存储最长递增子序列的元素索引
+  let i: number, j: number, left: number, right: number, middle: number;
+  const length = arr.length;
+
+  // 遍历数组中的每个元素
+  for (i = 0; i < length; i++) {
+    const currentElement = arr[i];
+
+    if (currentElement !== 0) {
+      j = sequenceIndices[sequenceIndices.length - 1];
+
+      // 如果当前元素大于序列中的最后一个元素
+      if (arr[j] < currentElement) {
+        predecessorIndices[i] = j; // 记录前一个元素的索引
+        sequenceIndices.push(i); // 将当前元素的索引添加到序列中
+        continue;
+      }
+
+      // 使用二分查找确定当前元素在序列中的插入位置
+      left = 0;
+      right = sequenceIndices.length - 1;
+      while (left < right) {
+        middle = ((left + right) / 2) | 0;
+        if (arr[sequenceIndices[middle]] < currentElement) {
+          left = middle + 1;
+        } else {
+          right = middle;
+        }
+      }
+
+      // 如果需要，替换序列中的元素
+      if (currentElement < arr[sequenceIndices[left]]) {
+        if (left > 0) {
+          predecessorIndices[i] = sequenceIndices[left - 1];
+        }
+        sequenceIndices[left] = i;
+      }
+    }
+  }
+
+  // 根据前驱索引重建最终递增子序列
+  left = sequenceIndices.length;
+  right = sequenceIndices[left - 1];
+  while (left-- > 0) {
+    sequenceIndices[left] = right;
+    right = predecessorIndices[right];
+  }
+
+  return sequenceIndices;
 }
 
 
