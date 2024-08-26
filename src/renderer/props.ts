@@ -78,7 +78,7 @@ export function patchProps(el: Container, key: string, oldVal: any, newVal: any)
  * 序列化class属性为字符串
  * @param {string | {[index: string | symbol]: boolean} | Array<any>} classSeries - 属性数据类型，可以是字符串、对象、数组
  * */
-export function normalizeClass(classSeries: string | {[index: string | symbol]: boolean} | Array<any>) {
+export function normalize(classSeries: string | {[index: string | symbol]: boolean} | Array<any>) {
   const className: Array<string> = []
   if (typeof classSeries == 'string') {
     return classSeries
@@ -87,7 +87,7 @@ export function normalizeClass(classSeries: string | {[index: string | symbol]: 
   } else if (Array.isArray(classSeries)) {
     return normalizeArray(classSeries)
   } else {
-    console.error("class type should be string, object or array.")
+    console.error("class/style type should be string, object or array.")
     return
   }
 
@@ -98,7 +98,7 @@ export function normalizeClass(classSeries: string | {[index: string | symbol]: 
     const objectString: Array<string> = []
     Object.keys(classSeries).forEach((key: string | symbol) => {
       if (typeof classSeries[key] !== 'boolean') {
-        console.error(`class value ${String(key)} must be a boolean.`)
+        console.error(`class/style value ${String(key)} must be a boolean.`)
         return false
       }
       if (classSeries[key]) {
@@ -121,7 +121,7 @@ export function normalizeClass(classSeries: string | {[index: string | symbol]: 
           className.push(normalizeObject(item))
         }
       } else {
-        console.error(`class value ${item} must be a string or object.`)
+        console.error(`class/style value ${item} must be a string or object.`)
       }
       console.log(item, className)
     })

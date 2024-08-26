@@ -1,4 +1,4 @@
-import { normalizeClass } from '../src/renderer/props'
+import { normalize } from '../src/renderer/props'
 
 const className = [
   'class1',
@@ -6,4 +6,4 @@ const className = [
 ]
 
 
-console.log(normalizeClass(className))
+console.log(normalize(className))
