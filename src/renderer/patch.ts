@@ -1,5 +1,6 @@
 import { Container, VNode } from '../../types/renderer'
 import { patchProps } from './props'
+import { mountComponent, patchComponent } from './component'
 
 // 文本和注释的唯一标识
 const Text = Symbol('Text')
@@ -9,7 +10,7 @@ const Comment = Symbol('Comment')
  * */
 export function mountElement(vnode: VNode, container: Container, anchor?: Node | null) {
   // 创建HTML元素，建立vnode与DOM之间的联系
-  const el: Container = vnode.el = document.createElement(vnode.type)
+  const el: Container = vnode.el = document.createElement(vnode.type as string)
 
   // 遍历props，将属性、事件添加到元素
   if (vnode.props) {
@@ -58,6 +59,11 @@ export function patch(oldNode: VNode | undefined, newNode: VNode, container: Con
 
   } else if (typeof type === 'object') {
     // type是object类型，是组件
+    if (!oldNode) {
+      mountComponent(newNode, container, anchor)
+    } else {
+      patchComponent(oldNode, newNode)
+    }
   } else if (type === Text) {
     // 文本节点
     if (!oldNode) {
@@ -151,7 +157,6 @@ export function patchChild(oldNode: VNode, newNode: VNode, el: Container) {
   } else if (Array.isArray(newNode.children)) {
     /* 新子节点是一组子节点 */
     diff(oldNode, newNode, el)
-
 
   } else {
     if (Array.isArray(oldNode.children)) {

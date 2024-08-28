@@ -131,3 +131,26 @@ export function normalize(classSeries: string | {[index: string | symbol]: boole
 
 
 }
+
+/**
+ * 解析组件 props 和 attrs 数据
+ * */
+export function resolveProps(options:  Record<string | symbol, any>, propsData: object) {
+  const props = {}
+  const attrs = {}
+
+  // 遍历为组件传递的 props 数据
+  for (const key in propsData) {
+    if (key in options || key.startsWith("on")) {
+      // 如果为组件传递的 props 数据在组件自身的 props 选项中有定义，props合法
+      props[key] = propsData[key]
+
+    } else {
+      // 否则将其作为 attrs
+      attrs[key] = propsData[key]
+    }
+  }
+
+  // 返回 props 和 attrs 数据
+  return [ props, attrs ]
+}
