@@ -1,9 +1,10 @@
-import { ComponentInstance, componentOptions, Container, VNode } from '../../types/renderer'
+import { AsyncComponentOptions, ComponentInstance, componentOptions, Container, VNode } from '../../types/renderer'
 import { patch } from './patch'
 import { reactive, shallowReactive, shallowReadonly } from '../reactivity/reactive'
 import { watchEffect } from '../core'
 import { EffectFunction } from '../../types/watchEffect'
 import { resolveProps } from './props'
+import { ref } from '../reactivity/ref'
 
 // 存储当前正在被初始化的组件实例
 let currentInstance: ComponentInstance | null = null
@@ -268,5 +269,38 @@ export function onMounted(fn: EffectFunction) {
     currentInstance.mounted.push(fn)
   } else {
     console.log("onMounted can only be used in setup.")
+  }
+}
+
+/**
+ * 异步组件定义函数
+ * */
+export function defineAsyncComponent(options: AsyncComponentOptions) {
+  const { loader } = options
+
+  // 存储异步加载组件
+  let innerComp: any = null
+  // 返回一个包装组件
+  return {
+    name: 'AsyncComponentWrapper',
+    setup() {
+      // 异步组件是否加载成功
+      const loaded = ref(false)
+      // 是否超时
+      
+      if (loader) {
+        // 执行加载器函数，返回一个Promise
+        // 加载成功后将组件赋给innerComp，并将loaded标记为true
+        loader().then((c:any) => {
+          innerComp = c
+          loaded.value = true
+        })
+      }
+
+      return () => {
+        // 异步组件加载成功则渲染该组件，否则渲染一个占位内容
+        return loaded.value ? { type: innerComp } : { type: Text, children: ''}
+      }
+    }
   }
 }
