@@ -1,4 +1,3 @@
-import { patch, unmount } from '../src/renderer/patch'
 import { EffectFunction } from './watchEffect'
 
 export type Renderer = {
@@ -12,7 +11,7 @@ export type Renderer = {
  * */
 export interface VNode {
 
-  type: string | componentOptions
+  type: string | componentOptions | FuncComponent
   props: Record<symbol | string, any>
   children: string | Array<VNode>
   /**
@@ -70,11 +69,11 @@ export interface componentOptions extends VNode {
   /**
    * render: 渲染函数
    * */
-  render: Function
+  render?: Function
   /**
    * data: 渲染状态数据函数
    * */
-  data: Function
+  data?: Function
   /**
    * 生命周期钩子
    * */
@@ -88,12 +87,14 @@ export interface componentOptions extends VNode {
    * 组合式API setup
    * */
   setup?: Function
+
 }
 
 /**
  * 组件
  * */
 export interface ComponentInstance {
+  keptAlive?: boolean
   /**
    * 状态数据
    * */
@@ -115,9 +116,103 @@ export interface ComponentInstance {
    * */
   slots: object
   /**
+   * 组件渲染上下文
+   * */
+  renderContext?: any
+  /**
    * 生命周期函数
    * */
   mounted: Array<EffectFunction>
+  unmounted: Array<EffectFunction>
+
+  /**
+   * KeepAlive特殊上下文对象
+   * */
+  keepAliveCtx?: KeepAliveCtx
 
 }
 
+/**
+ * 异步组件选项
+ * */
+export interface AsyncComponentOptions {
+
+  /**
+   * 加载器
+   * */
+  loader?: Function
+
+  /**
+   * 超时
+   * */
+  timeout?: number
+
+  /**
+   * 延时
+   * */
+  delay?: number
+
+  /**
+   * 出错时加载组件
+   * */
+  errorComponent: componentOptions
+
+  /**
+   * 加载组件
+   * */
+  loadComponent?: componentOptions
+
+  /**
+   * 错误回调
+   * */
+  onError?: Function
+}
+
+/**
+ * 函数式组件
+ * */
+export interface FuncComponent extends Function {
+  props?: Record<string, any>
+}
+
+/**
+ * KeepAlive特殊上下文对象
+ * */
+export interface KeepAliveCtx{
+
+  move: Function
+
+  createElement: Function
+
+
+
+}
+
+/**
+ * KeepAlive VNode
+ * */
+export interface KeepAliveVNode extends VNode {
+
+  keptAlive?: boolean
+
+  /**
+   * 避免渲染器真的将组件卸载
+   * */
+  shouldKeepAlive?: boolean
+
+  /**
+   * KeepAlive 组件实例
+   * */
+  keepAliveInstance?: KeepAliveInstance
+}
+
+/**
+ * keepAlive实例
+ * */
+export interface KeepAliveInstance extends ComponentInstance{
+  /**
+   * 内部函数，对应到KeepAlive组件的生命周期
+   * */
+  _activated: Function
+  _deActivated: Function
+}

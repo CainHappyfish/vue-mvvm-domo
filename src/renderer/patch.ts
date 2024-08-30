@@ -1,6 +1,6 @@
-import { Container, VNode } from '../../types/renderer'
+import { Container, KeepAliveVNode, VNode } from '../../types/renderer'
 import { patchProps } from './props'
-import { mountComponent, patchComponent } from './component'
+import { currentInstance, mountComponent, patchComponent } from '../components/component'
 
 // 文本和注释的唯一标识
 const Text = Symbol('Text')
@@ -38,7 +38,7 @@ export function mountElement(vnode: VNode, container: Container, anchor?: Node |
 
 }
 
-export function patch(oldNode: VNode | undefined, newNode: VNode, container: Container, anchor?: Node | null) {
+export function patch(oldNode: VNode | KeepAliveVNode | undefined, newNode: VNode, container: Container, anchor?: Node | null) {
   // 如果旧节点存在，则对比新旧节点的type
   if (oldNode && oldNode.type !== newNode.type) {
     // 类型不同则卸载
@@ -57,10 +57,16 @@ export function patch(oldNode: VNode | undefined, newNode: VNode, container: Con
 
     }
 
-  } else if (typeof type === 'object') {
-    // type是object类型，是组件
+  } else if (typeof type === 'object' || typeof type === 'function') {
+    // type是object活function类型，是组件
     if (!oldNode) {
-      mountComponent(newNode, container, anchor)
+      // 如果被 KeepAlive，不重新挂载而调用_activate
+      if ((newNode as KeepAliveVNode).keptAlive) {
+        (newNode as KeepAliveVNode).keepAliveInstance?._activated(newNode, container, anchor)
+      } else {
+        mountComponent(newNode, container, anchor)
+      }
+
     } else {
       patchComponent(oldNode, newNode)
     }
@@ -104,7 +110,7 @@ export function patch(oldNode: VNode | undefined, newNode: VNode, container: Con
 /**
  * 卸载节点
  * */
-export function unmount(vnode: VNode) {
+export function unmount(vnode: VNode | KeepAliveVNode) {
   // 如果为Fragment，则卸载所有子节点
   if (vnode.type === "Fragment") {
     if (typeof vnode.children !== 'string') {
@@ -113,6 +119,22 @@ export function unmount(vnode: VNode) {
     } else {
       console.error("Fragment children is not a vnode.")
     }
+  } else if (typeof vnode.type === 'object') {
+    // 对于需要被 KeepAlive 的组件，我们不应该真的卸载它，而应调用该组件的父组件
+    // 即 KeepAlive 组件的 _deActivate 函数使其失活
+    if ((vnode as KeepAliveVNode).shouldKeepAlive && (vnode as KeepAliveVNode).keepAliveInstance) {
+      (vnode as KeepAliveVNode).keepAliveInstance?._deActivated(vnode)
+    }
+
+    // 对于组件的卸载，本质上是要卸载组件所渲染的内容，即 subTree
+    if (vnode.component && vnode.component.subTree &&
+      currentInstance && currentInstance.unmounted
+    ) {
+      unmount(vnode.component.subTree)
+      // 执行卸载生命周期钩子函数
+      currentInstance.renderContext && currentInstance.unmounted.forEach(fn => fn.call(currentInstance?.renderContext))
+    }
+    return
   }
 
   const parent = vnode.el.parentNode

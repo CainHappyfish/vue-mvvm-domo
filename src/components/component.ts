@@ -1,20 +1,38 @@
-import { AsyncComponentOptions, ComponentInstance, componentOptions, Container, VNode } from '../../types/renderer'
-import { patch } from './patch'
+import {
+  AsyncComponentOptions,
+  ComponentInstance,
+  componentOptions,
+  Container,
+  FuncComponent,
+  VNode
+} from '../../types/renderer'
+import { patch } from '../renderer/patch'
 import { reactive, shallowReactive, shallowReadonly } from '../reactivity/reactive'
 import { watchEffect } from '../core'
 import { EffectFunction } from '../../types/watchEffect'
-import { resolveProps } from './props'
+import { resolveProps } from '../renderer/props'
 import { ref } from '../reactivity/ref'
 
 // 存储当前正在被初始化的组件实例
-let currentInstance: ComponentInstance | null = null
+export let currentInstance: ComponentInstance | null = null
 
 /**
  * 组件挂载函数
  * */
 export function mountComponent(compVNode: VNode, container: Container, anchor?: Node | null) {
+
+  // 检查是否是函数式组件
+  const isFunctional = typeof compVNode.type === 'function'
+
   // 获取组件
-  const componentOptions = compVNode.type as componentOptions
+  let componentOptions = compVNode.type as componentOptions
+  // 如果是函数式组件，则将compVNode.type作为渲染函数
+  // 将compVNode.type.props作为props选项
+  if (isFunctional) {
+    componentOptions.render = compVNode.type as FuncComponent
+    componentOptions.props = (compVNode.type as FuncComponent).props as Record<string, any>
+  }
+
   // 获取组件渲染函数与props定义
   let { render, data, setup, props: propsOption, beforeCreate, created, beforeMount, mounted, beforeUpdate, updated } = componentOptions
 
@@ -22,7 +40,10 @@ export function mountComponent(compVNode: VNode, container: Container, anchor?: 
   beforeCreate && beforeCreate()
 
   // 调用data函数获取原始数据，并包装为响应式
-  const state = reactive(data())
+  let state: any = null
+  if (data) {
+    state = reactive(data())
+  }
   // 获取props, attrs
   const [props, attrs] = resolveProps(propsOption, compVNode.props)
   // 使用编译好的compVNode.children作为slot对象
@@ -41,7 +62,8 @@ export function mountComponent(compVNode: VNode, container: Container, anchor?: 
     // 插槽
     slots: slots,
     // 生命周期函数
-    mounted: []
+    mounted: [],
+    unmounted: []
   }
 
   /**
@@ -134,7 +156,12 @@ export function mountComponent(compVNode: VNode, container: Container, anchor?: 
   watchEffect(() => {
     // 执行渲染函数，获取组件要渲染的内容，即 render 函数返回的虚拟ODM
     // 调用时将this设置为state，从而render函数内部可以使用this访问组件自身状态数据
-    const subTree = render.call(state, state)
+    let subTree: any = null
+    if (render) {
+      subTree = render.call(state, state)
+    } else {
+      console.error(`[${state}] ${render} does not exist.`)
+    }
 
     if (!instance.isMounted) {
 
@@ -145,9 +172,13 @@ export function mountComponent(compVNode: VNode, container: Container, anchor?: 
       patch(undefined, subTree, container, anchor)
       // 将组件实例的 isMounted 设置为 true，这样当更新发生时就不会再次进行挂载操作
       instance.isMounted = true
+      instance.renderContext = renderContext
 
       // 完成挂载钩子
       mounted && mounted.call(state)
+      // 遍历mounted生命周期函数数组执行生命周期函数
+      instance.mounted && instance.mounted.forEach(hook => hook.call(renderContext))
+      // instance.unmounted && instance.unmounted.forEach(hook => hook.call(renderContext))
 
     } else {
       // 已被挂载，更新
@@ -261,6 +292,120 @@ function setCurrentInstance(instance: ComponentInstance | null) {
 }
 
 /**
+ * 异步组件定义函数
+ * */
+export function defineAsyncComponent(options: AsyncComponentOptions) {
+  const { loader } = options
+
+  // 存储异步加载组件
+  let innerComp: any = null
+
+  // 记录重试次数
+  let retries = 0
+  // 封装load函数
+  function load() {
+    if (loader) {
+      return loader()
+        .catch((err: Error) => {
+          // 如果指定了onError回调，将控制权交给用户
+          if (options.onError) {
+            // 返回一个新的Promise实例
+            return new Promise((resolve, reject) => {
+              // 重试
+              const retry = () => {
+                resolve(load())
+                retries++
+              }
+
+              // 失败
+              const fail = () => { reject(err) }
+              // 作为 onError 函数回调参数
+              options.onError && options.onError(retry, fail, retries)
+            })
+          } else {
+            throw err
+          }
+        })
+    } else {
+      console.error("loader does not exist.", options)
+    }
+  }
+
+  // 返回一个包装组件
+  return {
+    name: 'AsyncComponentWrapper',
+    setup() {
+      // 异步组件是否加载成功
+      const loaded = ref(false)
+      // 定义error存储错误对象
+      const e = new Error()
+      const err = ref(false)
+      const error = ref(e)
+      // 加载标识
+      const loading = ref(false)
+
+      let loadingTimer: any = null
+      // 存在delay则开启计时器
+      if (options.delay) {
+        loadingTimer = setTimeout(() => {
+          loading.value = true
+        }, options.delay)
+      } else {
+        // 没有则直接标记为加载中
+        loading.value = true
+      }
+
+      if (loader) {
+        // 执行加载器函数，返回一个Promise
+        // 调用load，加载成功后将组件赋给innerComp，并将loaded标记为true
+        load().then((c:any) => {
+          innerComp = c
+          loaded.value = true
+        })
+          .catch((e: any) => {
+            error.value = e
+            err.value = true
+          })
+          .finally(() => {
+            // 加载完毕后无论成功与否都要清除延迟定时器
+            loaded.value = false
+            // 加载完毕后无论成功与否都要清除延迟定时器
+            clearTimeout(loadingTimer)
+          })
+      }
+
+      let timer: any = null
+      // 如果指定超时时长，设置计时器
+      if (options.timeout) {
+        timer = setTimeout(() => {
+          // 超时后将 timeout 设置为true，并创建一个错误对象
+          error.value = new Error(`Async component timed out after ${options.timeout}ms`)
+          err.value = true
+        }, options.timeout)
+      }
+      // 包装组件被卸载时清除计时器
+      onUnmounted(() => clearTimeout(timer))
+
+      // 占位内容
+      const placeholder = { type: Text, children: ''}
+      return () => {
+        // 异步组件加载成功则渲染该组件，否则渲染一个占位内容
+        if (loaded.value) {
+          return { type: innerComp }
+        } else if (error.value && err.value && options.errorComponent) {
+          return { type: options.errorComponent, props: { error: error.value } }
+        } else if (loading.value && options.loadComponent) {
+          return { type: options.loadComponent }
+        }
+        return placeholder
+      }
+    }
+  }
+}
+
+
+/* 生命周期钩子 */
+/**
  * onMounted注册生命周期函数
  * */
 export function onMounted(fn: EffectFunction) {
@@ -273,34 +418,13 @@ export function onMounted(fn: EffectFunction) {
 }
 
 /**
- * 异步组件定义函数
+ * onUnmounted卸载生命周期函数
  * */
-export function defineAsyncComponent(options: AsyncComponentOptions) {
-  const { loader } = options
-
-  // 存储异步加载组件
-  let innerComp: any = null
-  // 返回一个包装组件
-  return {
-    name: 'AsyncComponentWrapper',
-    setup() {
-      // 异步组件是否加载成功
-      const loaded = ref(false)
-      // 是否超时
-      
-      if (loader) {
-        // 执行加载器函数，返回一个Promise
-        // 加载成功后将组件赋给innerComp，并将loaded标记为true
-        loader().then((c:any) => {
-          innerComp = c
-          loaded.value = true
-        })
-      }
-
-      return () => {
-        // 异步组件加载成功则渲染该组件，否则渲染一个占位内容
-        return loaded.value ? { type: innerComp } : { type: Text, children: ''}
-      }
-    }
+export function onUnmounted(fn: EffectFunction) {
+  if (currentInstance) {
+    // 将生命周期函数添加到 instance.unmounted 中
+    currentInstance.unmounted.push(fn)
+  } else {
+    console.log("onMounted can only be used in setup.")
   }
 }

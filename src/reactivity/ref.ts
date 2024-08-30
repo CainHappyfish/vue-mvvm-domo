@@ -38,7 +38,7 @@ export function proxyRef(target: any): any {
 }
 
 export function ref<T>(data: T): Ref<T> {
-  const wrapper = {
+  const wrapper: Ref<T> = {
     value: data
   }
 
