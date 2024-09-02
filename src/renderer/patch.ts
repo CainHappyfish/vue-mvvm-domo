@@ -1,6 +1,7 @@
 import { Container, KeepAliveVNode, VNode } from '../../types/renderer'
 import { patchProps } from './props'
 import { currentInstance, mountComponent, patchComponent } from '../components/component'
+import { teleport } from '../components/components'
 
 // 文本和注释的唯一标识
 const Text = Symbol('Text')
@@ -20,6 +21,15 @@ export function mountElement(vnode: VNode, container: Container, anchor?: Node |
     }
 
   }
+
+  // 判断VNode是否需要过渡
+  const needTransition = vnode.transition
+  if (needTransition) {
+    // 调用 beforeEnter钩子
+    vnode.transition?.beforeEnter(el)
+  }
+
+
   if (typeof vnode.children === 'string') {
     /* 如果子节点是字符串，则说明是文本节点*/
     el.textContent = vnode.children
@@ -35,6 +45,10 @@ export function mountElement(vnode: VNode, container: Container, anchor?: Node |
     container.insertBefore(el, anchor)
   }
   container.appendChild(el)
+
+  if (needTransition) {
+    vnode.transition?.enter(el)
+  }
 
 }
 
@@ -100,7 +114,12 @@ export function patch(oldNode: VNode | KeepAliveVNode | undefined, newNode: VNod
       } else {
         console.error("Fragment children is not a vnode.")
       }
-    } else {
+    } else if (typeof type === 'object' && (type as teleport)?._isTeleport) {
+      // 组件选项中如果存在 __isTeleport 标识，则它是 Teleport 组件，需要移交控制权
+      (type as teleport).process(newNode, oldNode, container, anchor)
+    }
+    
+    else {
       // 旧节点存在，更新Fragment的子节点
       patchChild(oldNode, newNode, container)
     }
@@ -111,6 +130,9 @@ export function patch(oldNode: VNode | KeepAliveVNode | undefined, newNode: VNod
  * 卸载节点
  * */
 export function unmount(vnode: VNode | KeepAliveVNode) {
+  // 是否需要过渡处理
+  const needTransition = vnode.transition
+
   // 如果为Fragment，则卸载所有子节点
   if (vnode.type === "Fragment") {
     if (typeof vnode.children !== 'string') {
@@ -138,7 +160,13 @@ export function unmount(vnode: VNode | KeepAliveVNode) {
   }
 
   const parent = vnode.el.parentNode
-  if (parent) parent.removeChild(vnode.el)
+  if (parent) {
+    if (needTransition) {
+      vnode.transition?.leave(vnode.el)
+    } else {
+      parent.removeChild(vnode.el)
+    }
+  }
 }
 
 /**
@@ -390,5 +418,6 @@ function getSequence(arr: Array<any>) {
 
   return sequenceIndices;
 }
+
 
 

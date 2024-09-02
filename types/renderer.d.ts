@@ -1,4 +1,5 @@
 import { EffectFunction } from './watchEffect'
+import { keepAlive, teleport, transition } from '../src/components/components'
 
 export type Renderer = {
   render: (vnode: VNode, container: Container) => any
@@ -11,7 +12,7 @@ export type Renderer = {
  * */
 export interface VNode {
 
-  type: string | componentOptions | FuncComponent
+  type: string | componentOptions | FuncComponent | keepAlive | teleport
   props: Record<symbol | string, any>
   children: string | Array<VNode>
   /**
@@ -26,6 +27,10 @@ export interface VNode {
    * 组件
    * */
   component?: ComponentInstance
+  /**
+   * transition
+   * */
+  transition?: transition
 }
 
 /**

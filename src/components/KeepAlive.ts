@@ -6,9 +6,9 @@ import {
   VNode
 } from '../../types/renderer'
 import { currentInstance } from './component'
+import { keepAlive, teleport } from './components'
 
-
-export const KeepAlive = {
+export const KeepAlive: keepAlive = {
   // KeepAlive独有的属性，用作标识
   _isKeepAlive: true,
 
@@ -24,7 +24,7 @@ export const KeepAlive = {
      * key: vnode.type
      * value: vnode
      * */
-    const cache = new Map<string | componentOptions | FuncComponent, VNode>()
+    const cache = new Map<string | componentOptions | FuncComponent | teleport | keepAlive, VNode>()
     // 当前 KeepAlive 组件实例
     const instance = currentInstance as KeepAliveInstance
     (instance.keepAliveCtx as KeepAliveCtx).move = (vnode: VNode, container: Container, anchor?: Node | null) => {
