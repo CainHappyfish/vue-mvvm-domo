@@ -1,6 +1,52 @@
 import { AstNode, parseCtx } from '../../../types/compiler'
-import { parse, parseChildren } from './parse'
+import { parseChildren } from './parse'
 import { TextModes } from './ast'
+
+/**
+ * 命名字符引用表
+ * */
+export const namedCharacterReferences = {
+  "gt": ">",
+  "gt;": ">",
+  "lt": "<",
+  "lt;": "<",
+  "ltcc;": "⪦"
+
+}
+
+/**
+ * 替换码点表
+ * */
+const CCR_REPLACEMENTS = {
+  0x80: 0x20ac,
+  0x82: 0x201a,
+  0x83: 0x0192,
+  0x84: 0x201e,
+  0x85: 0x2026,
+  0x86: 0x2020,
+  0x87: 0x2021,
+  0x88: 0x02c6,
+  0x89: 0x2030,
+  0x8a: 0x0160,
+  0x8b: 0x2039,
+  0x8c: 0x0152,
+  0x8e: 0x017d,
+  0x91: 0x2018,
+  0x92: 0x2019,
+  0x93: 0x201c,
+  0x94: 0x201d,
+  0x95: 0x2022,
+  0x96: 0x2013,
+  0x97: 0x2014,
+  0x98: 0x02dc,
+  0x99: 0x2122,
+  0x9a: 0x0161,
+  0x9b: 0x203a,
+  0x9c: 0x0153,
+  0x9e: 0x017e,
+  0x9f: 0x0178
+}
+
 
 /**
  * 标签解析
@@ -41,20 +87,61 @@ export function parseElement(context: parseCtx, ancestors: AstNode[]) {
  * 注释解析
  * */
 export function parseComment(context: parseCtx) {
+  // 消费注释的开始部分
+  context.advanceBy('<!--'.length)
+  // 找到结束索引
+  const closeIndex = context.source.indexOf("-->")
+  if (closeIndex < 0) {
+    console.error(`${context.source} is lack of '-->'`)
+  }
+  // 截取开始定界符于结束定界符之间的内容作为注释内容
+  const content = context.source.slice(0, closeIndex)
+  // 消费表达式的内容
+  context.advanceBy(content.length)
+  // 消费结束定界符
+  context.advanceBy("-->".length)
 
+  // 返回类型为 Interpolation 的节点，代表插值节点
+  return {
+    type: 'Comment',
+    content
+  }
 }
 
 /**
  * CDATA解析
  * */
-export function parseCDATA(context: parseCtx, ancestors: AstNode[]) {
-
-}
+// export function parseCDATA(context: parseCtx, ancestors: AstNode[]) {
+//
+// }
 
 /**
  * 插值节点解析
  * */
 export function parseInterpolation(context: parseCtx) {
+  // 消费开始界定符号
+  context.advanceBy('{{'.length)
+  // 找到结束定界符的位置索引
+  const closeIndex = context.source.indexOf("}}")
+  if (closeIndex < 0) {
+    console.error(`${context.source} is lack of '}}'`)
+  }
+  // 截取开始定界符于结束定界符之间的内容作为插值表达式
+  const content = context.source.slice(0, closeIndex)
+  // 消费表达式的内容
+  context.advanceBy(content.length)
+  // 消费结束定界符
+  context.advanceBy("}}".length)
+
+  // 返回类型为 Interpolation 的节点，代表插值节点
+  return {
+    type: 'Interpolation',
+    content: {
+      type: "Expression",
+      content: decodeHTML(content)
+    }
+  }
+
 
 }
 
@@ -212,6 +299,153 @@ export function parseAttributes(context: parseCtx) {
   }
 
   return props
+}
+
+/**
+ * 命名字符引用解码
+ * */
+export function decodeHTML(rawText: string, asAttr = false) {
+
+  // 当前被消费长度
+  let offset = 0
+  const end = rawText.length
+  // 解码后的文本
+  let decodedText = ''
+  // 引用表中实体名称的最大长度
+  let maxCRNameLength = 0
+
+  // advance 函数用于消费指定长度的文本
+  function advance(length: number) {
+    offset += length
+    rawText = rawText.slice(length)
+  }
+
+  while (offset < end) {
+    // 匹配字符串引用的开始部分
+    // & 命名字符引用
+    // &# 十进制数字字符引用
+    // &#* 十六进制数字字符引用
+    const head = /&(?:#x?)?/i.exec(rawText)
+    // 没有匹配则说明不需要继续解码了
+    if (!head) {
+      // 计算剩余内容
+      const remain = end - offset
+      // 将剩余内容加到 decodedText 上
+      decodedText += rawText.slice(0, remain)
+      // 消费剩余内容
+      advance(remain)
+      break
+    }
+
+    // head.index 为匹配的字符 & 在 rawText 中的位置索引
+    // 截取字符 & 之前的内容加到 decodedText 上
+    decodedText += rawText.slice(0, head.index)
+    // 消费字符 & 之前的内容
+    advance(head.index)
+
+    // 如果满足条件则是命名字符引用，否则为数字字符引用
+    if (head[0] === '&') {
+      let name = ''
+      let value: string | undefined = undefined
+      // 字符 & 的下一个字符必须是 ASCII 字母或数字
+      if (/[0-9a-z]/i.test(rawText[1])) {
+        // 根据引用表计算实体名称的最大长度
+        if (!maxCRNameLength) {
+          maxCRNameLength = Object.keys(namedCharacterReferences).reduce(
+            (max, name) => Math.max(Number(max), name.length), 0
+          )
+        }
+
+        // 从最大长度开始对文本进行截取，并尝试去引用表中找到对应的项
+        for (let length = maxCRNameLength; !value && length > 0 ; length--) {
+          name = rawText.substring(1, length)
+          value = namedCharacterReferences[name]
+        }
+
+        if (value) {
+          const semi = name.endsWith(";")
+
+          // 如果解码的文本作为属性值，最后一个匹配的字符不是分号，
+          // 并且最后一个匹配字符的下一个字符是等于号（=）、ASCII 字母或
+          // 数字，
+          // 由于历史原因，将字符 & 和实体名称 name 作为普通文本
+          if (asAttr && !semi &&
+              /[=a-z0-9]/i.test(rawText[name.length + 1] || '')
+          ) {
+
+            decodedText += '&' + name
+            advance(1 + name.length)
+
+          } else {
+            // 其他情况正常使用解码后的内容拼接到 decodedText
+            decodedText += value
+            advance(1 + name.length)
+          }
+
+        } else {
+          // 没找到对应值，解码失败
+          decodedText += '&' + name
+          advance(1 + name.length)
+        }
+
+      } else {
+        // 如果字符 & 的下一个字符不是 ASCII 字母或数字，则将字符 & 作为普通文本
+        decodedText += '&'
+        advance(1)
+      }
+    } else {
+      // 判断十进制还是十六进制
+      const hex = head[0] === '&#x'
+      const pattern = hex ? /^&#x([0-9a-f]+);?/i : /^&#([0-9]+);?/i
+
+      // body[1] 的值就是 Unicode 码点
+      const body = pattern.exec(rawText)
+      // 调用 String.fromCodePoint 解码
+      if (body) {
+        let cp = parseInt(body[1], hex ? 16 : 10)
+
+        // 检查合法性
+        if (cp === 0) {
+            // 如果码点值为 0x00，替换为 0xfffd
+            cp = 0xfffd
+        } else if (cp > 0x10ffff) {
+            // 如果码点值超过 Unicode 的最大值，替换为 0xfffd
+            cp = 0xfffd
+        } else if (cp >= 0xd800 && cp <= 0xdfff) {
+            // 如果码点值处于代理对 surrogate pair 范围内，替换为 0xfffd
+            cp = 0xfffd
+        } else if ((cp >= 0xfdd0 && cp <= 0xfdef) || (cp & 0xfffe) === 0xfffe) {
+            // 如果码点值处于 noncharacter 范围内，则什么都不做，交给平台处理
+            // noncharacter 代表 Unicode 永久保留的码点，用于 Unicode 内部
+        } else if (
+          // 控制字符集的范围是：[0x01, 0x1f] 加上 [0x7f, 0x9f]
+            // 去掉 ASICC 空白符：0x09(TAB)、0x0A(LF)、0x0C(FF)
+            // 0x0D(CR) 虽然也是 ASICC 空白符，但需要包含
+            (cp >= 0x01 && cp <= 0x08) || cp === 0x0b ||
+            (cp >= 0x0d && cp <= 0x1f) || (cp >= 0x7f && cp <= 0x9f)
+        ) {
+            // 在 CCR_REPLACEMENTS 表中查找替换码点，如果找不到，则使用原码点
+            cp = CCR_REPLACEMENTS[cp] || cp
+        }
+        // 最后进行解码，追加到 decodedText 上
+        const char = String.fromCodePoint(cp)
+        decodedText += char
+
+        // 消费整个数字字符引用的内容
+        advance(body[0].length)
+
+      } else {
+        // 如果没有匹配，则不进行解码操作，只是把 head[0] 追加到decodedText 上并消费
+        decodedText += head[0]
+        advance(head[0].length)
+      }
+    }
+
+
+  }
+
+  return decodedText
+
 }
 
 
