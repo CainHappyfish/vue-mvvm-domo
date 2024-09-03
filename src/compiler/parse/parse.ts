@@ -1,4 +1,6 @@
-import { AstNode, token } from '../../../types/compiler'
+import { AstNode, parseCtx, token } from '../../../types/compiler'
+import { TextModes } from './ast'
+import { parseCDATA, parseComment, parseElement, parseInterpolation, parseText } from './parseUtils'
 
 /**
  * 状态机状态
@@ -192,61 +194,102 @@ export function tokenize(str: string) {
  * 构建AST
  * */
 export function parse(templateStr: string): AstNode {
-  // 获取模板对应token
-  const tokens = tokenize(templateStr)
-  // 创建Root节点
-  const root: AstNode = {
-    type: 'Root',
-    children: []
-  }
+  // 解析器上下文
+  const context: parseCtx = {
+    // 模板内容
+    source: templateStr,
+    // 解析器模式
+    mode: TextModes.DATA,
 
-  // 创建 elementStack 栈
-  const elementStack: AstNode[] = [root]
+    // 消费指定数量的字符
+    advanceBy(num: number) {
+      // 截取位置 num 后的模板内容，并替换当前模板内容
+      context.source = context.source.slice(num)
+    },
 
-  // 循环扫描 tokens
-  while (tokens.length) {
-    // 获取当前栈顶节点作为父节点 parent
-    const parent = elementStack[elementStack.length - 1] as AstNode
-    // 获取当前 token
-    const token = tokens[0]
+    // 清除空白字符
+    advanceSpaces() {
+      const match = /^[\t\r\n\f ]+/.exec(context.source)
+      if (match) {
+        // 调用 advanceBy 清除
+        context.advanceBy(match[0].length)
+      }
 
-    switch (token.type) {
-
-      case 'tag':
-        // 如果token是开始标签，则创建 Element 类型的AST节点
-        const elementNode: AstNode = {
-          type: 'Element',
-          tag: token.name,
-          children: []
-        }
-        // 添加到父节点的 children
-        parent.children?.push(elementNode)
-        // 压栈
-        elementStack.push(elementNode)
-        break
-
-      case 'text':
-        // 如果token是文本节点，则创建 Element 类型的AST节点
-        const textNode: AstNode = {
-          type: 'Text',
-          content: token.content
-        }
-        // 添加到父节点的 children
-        parent.children?.push(textNode)
-        break
-
-      case 'tagEnd':
-        // 结束标签则弹出栈顶元素
-        elementStack.pop()
-        break
     }
 
-    // 移除处理过的 token
-    tokens.shift()
-
   }
 
-  return root
+  const nodes: AstNode[] = parseChildren(context, [])
+
+  return {
+    type: 'Root',
+    children: nodes
+  }
 
 }
 
+/**
+ * 解析子节点
+ * @param ctx - 解析器上下文
+ * @param ancestors - 父节点构成节点栈
+ * */
+export function parseChildren(ctx: parseCtx, ancestors: AstNode[]) {
+  // 定义数组存储子节点
+  let nodes: AstNode[] = []
+  const { mode, source } = ctx
+
+  while(!isEnd(ctx, ancestors)) {
+    let node: AstNode
+    // DATA RCDATA 模式才支持插值节点的解析
+    if (mode === TextModes.DATA || mode === TextModes.RCDATA) {
+      // 只有 DATA 模式才支持标签节点解析
+      if (mode === TextModes.DATA && source[0] === '<') {
+        if (source[1] === '!') {
+          if (source.startsWith('<!--')) {
+            // 注释
+            node = parseComment(ctx)
+          } else if (source.startsWith('<![CDATA[')) {
+            // CDATA
+            node = parseCDATA(ctx, ancestors)
+          }
+        }
+      } else if (source[1] === '/') {
+        // 结束标签，报错
+        console.error(`invalid tag ${ctx.source}`)
+        continue
+
+      } else if (/a-z/i.test(source[1])) {
+        // 标签元素
+        node = parseElement(ctx, ancestors)
+      } else if (source.startsWith('{{')) {
+        // 解析插值
+        node = parseInterpolation(ctx)
+      }
+    }
+
+    // node 不存在，作为文本处理
+    if (!node) {
+      // 解析文本节点
+      node = parseText(ctx)
+    }
+
+    // 将节点添加到 nodes
+    nodes.push(node)
+
+  }
+
+  return nodes
+}
+
+function isEnd(ctx: parseCtx, ancestors: AstNode[]) {
+  // 模板内容解析完毕后停止
+  if (!ctx.source) return true
+
+  // 获取父级标签节点
+  const parent = ancestors[ancestors.length - 1]
+  // 如果遇到结束标签，并且该标签与父级标签节点同名，则停止
+  if (parent && ctx.source.startsWith(`</${parent.tag}`)) {
+    return true
+  }
+
+}

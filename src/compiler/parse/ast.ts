@@ -1,5 +1,14 @@
 import { ArrayExp, CallExp, Identifier, StringLiteral } from '../../../types/compiler'
 
+/**
+ * 状态表
+ * */
+export const TextModes = {
+  DATA: 'DATA',
+  RCDATA: 'RCDATA',
+  RAWTEXT: 'RAWTEXT',
+  CDATA: 'CDATA'
+}
 
 /**
  * 创建 StringLiteral 节点

@@ -27,12 +27,26 @@ export interface AstNode {
   type: string
   tag?: string
   content?: string
+
+  /**
+   * 标签属性
+   * */
+  props?: Array<any>
+
+  /**
+   * 子节点
+   * */
   children?: AstNode[]
 
   /**
    * 对应的 Js Ast 节点
    * */
   jsNode?: CallExp | ArrayExp | StringLiteral | Identifier | FunctionDecl
+
+  /**
+   * 是否自闭合
+   * */
+  isSelfClosing?: boolean
 }
 
 /**
@@ -196,9 +210,55 @@ export interface generateCtx {
    * */
   deIndent: () => any
 
+}
 
+export interface parseCtx {
+  /**
+   * 模板内容
+   * */
+  source: string
+
+  /**
+   * 解析器模式
+   * */
+  mode: string
+
+  /**
+   * 取用指定数量字符函数
+   * */
+  advanceBy: (number) => any
+
+  /**
+   * 匹配空白字符串
+   * */
+  advanceSpaces: () => any
 
 }
+
+// /**
+//  * 标签节点
+//  * */
+// export interface tagNode {
+//
+//   type: 'Element',
+//
+//   /**
+//    * 标签名称
+//    * */
+//   tag: string
+//   /**
+//    * 标签属性
+//    * */
+//   props: Array<any>,
+//   /**
+//    * 子节点
+//    * */
+//   children: Array<tagNode>,
+//   /**
+//    * 是否自闭合
+//    * */
+//   isSelfClosing: boolean
+// }
 
 
 
