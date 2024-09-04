@@ -1,4 +1,4 @@
-import { Container, VNode } from '../../types/renderer'
+import { Container, VNode } from './renderer'
 
 export interface keepAlive {
   _isKeepAlive: boolean

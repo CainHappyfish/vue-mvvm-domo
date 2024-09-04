@@ -12,6 +12,7 @@ import { watchEffect } from '../core'
 import { EffectFunction } from '../../types/watchEffect'
 import { resolveProps } from '../renderer/props'
 import { ref } from '../reactivity/ref'
+import { hydrateNode } from '../renderer/hydrate'
 
 // 存储当前正在被初始化的组件实例
 export let currentInstance: ComponentInstance | null = null
@@ -153,7 +154,7 @@ export function mountComponent(compVNode: VNode, container: Container, anchor?: 
   // 完成创建钩子
   created && created.call(renderContext)
 
-  watchEffect(() => {
+  instance.update = watchEffect(() => {
     // 执行渲染函数，获取组件要渲染的内容，即 render 函数返回的虚拟ODM
     // 调用时将this设置为state，从而render函数内部可以使用this访问组件自身状态数据
     let subTree: any = null
@@ -167,9 +168,14 @@ export function mountComponent(compVNode: VNode, container: Container, anchor?: 
 
       // 挂载前钩子
       beforeMount && beforeMount().call(state)
+      // 如果 vnode.el 存在，则意味着要执行激活
+      if (compVNode.el) {
+        hydrateNode(compVNode.el, subTree, container)
+      } else {
+        // 初次挂载组件subTree
+        patch(undefined, subTree, container, anchor)
+      }
 
-      // 初次挂载组件subTree
-      patch(undefined, subTree, container, anchor)
       // 将组件实例的 isMounted 设置为 true，这样当更新发生时就不会再次进行挂载操作
       instance.isMounted = true
       instance.renderContext = renderContext
@@ -287,7 +293,7 @@ function hasPropsChanged(oldProps: any, newProps: any) {
 /**
  * 接收组件实例作为参数，并将该实例设置为 currentInstance
  * */
-function setCurrentInstance(instance: ComponentInstance | null) {
+export function setCurrentInstance(instance: ComponentInstance | null) {
   currentInstance = instance
 }
 

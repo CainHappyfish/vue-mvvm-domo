@@ -1,6 +1,6 @@
 import { Container, VNode } from '../../types/renderer'
 import { patch, patchChild } from '../renderer/patch'
-import { move, teleport } from './components'
+import { move, teleport } from '../../types/components'
 
 export const Teleport: teleport = {
   _isTeleport: true,

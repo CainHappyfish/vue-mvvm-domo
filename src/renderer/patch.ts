@@ -1,7 +1,7 @@
 import { Container, KeepAliveVNode, VNode } from '../../types/renderer'
 import { patchProps } from './props'
 import { currentInstance, mountComponent, patchComponent } from '../components/component'
-import { teleport } from '../components/components'
+import { teleport } from '../../types/components'
 
 // 文本和注释的唯一标识
 const Text = Symbol('Text')

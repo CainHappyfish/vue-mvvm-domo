@@ -1,8 +1,9 @@
 import { EffectFunction } from './watchEffect'
-import { keepAlive, teleport, transition } from '../src/components/components'
+import { keepAlive, teleport, transition } from './components'
 
 export type Renderer = {
   render: (vnode: VNode, container: Container) => any
+  hydrate: (vnode: VNode, container: Container) => any
 }
 
 /**
@@ -164,6 +165,10 @@ export interface ComponentInstance {
    * */
   keepAliveCtx?: KeepAliveCtx
 
+  /**
+   * 更新函数
+   * */
+  update?: Function
 }
 
 /**

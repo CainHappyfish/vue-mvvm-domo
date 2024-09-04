@@ -6,7 +6,7 @@ import {
   VNode
 } from '../../types/renderer'
 import { currentInstance } from './component'
-import { keepAlive, teleport } from './components'
+import { keepAlive, teleport } from '../../types/components'
 
 export const KeepAlive: keepAlive = {
   // KeepAlive独有的属性，用作标识

@@ -1,4 +1,4 @@
-import { transition } from './components'
+import { transition } from '../../types/components'
 import { Container } from '../../types/renderer'
 
 export const Transition = {

@@ -1,4 +1,5 @@
 import { Container, Invoker } from '../../types/renderer'
+import { decodeHTML } from '../compiler/parse/parseUtils'
 
 
 /**
@@ -154,3 +155,126 @@ export function resolveProps(options:  Record<string | symbol, any>, propsData: 
   // 返回 props 和 attrs 数据
   return [ props, attrs ]
 }
+
+/**
+ * 处理Props
+ * */
+const shouldIgnoreProp = ['key', 'ref']
+export function renderAttrs(props: Record<string, any>) {
+  let ret = ''
+  for (const key in props) {
+    if (shouldIgnoreProp.includes(key) || /^on[^a-z]/.test(key)) {
+      // 检测属性名称，如果是事件或应该被忽略的属性，则忽略它
+      continue
+    }
+
+    const value = props[key]
+
+    ret += renderDynamicAttr(key, value)
+
+  }
+  return ret
+}
+
+/**
+ * 判断是否是布尔属性
+ * */
+const booleanAttrs = [
+  'itemscope', 'allowfullscreen', 'formnovalidate', 'ismap', 'nomodule', 'novalidate', 'readonly',
+  `async`, `autofocus`, `autoplay`, `controls`, `default`, `defer`, `disabled`, `hidden`,
+  `loop`,`open`,`required`,`reversed`,`scoped`,`seamless`,
+  `checked`, `muted`, `multiple`, `selected`
+]
+const isBooleanAttr = (key: string): boolean => {
+  return booleanAttrs.includes(key)
+}
+
+/**
+ * 判断属性名称是否合法且安全
+ * */
+const isSSRSafeAttrName = (key: string): boolean => {
+  return !/[>/="'\u0009\u000a\u000c\u0020]/.test(key)
+}
+
+/**
+ * HTML转义函数
+ * */
+const escapeRE = /["'&<>]/
+function escapeHTML(value: string): string {
+  const str = '' + value
+  const match = escapeRE.exec(str)
+
+  if (!match) {
+    return str
+  }
+
+  let html = ''
+  let escaped: string
+  let index: number
+  let lastIndex = 0
+
+  for (index = match.index ; index < str.length; index++) {
+    switch (str.charCodeAt(index)) {
+      case 34: // "
+        escaped = '&quot'
+        break
+
+      case 38: // &
+        escaped = '&amp'
+        break
+
+      case 39: // '
+        escaped = '&#39'
+        break
+
+      case 60: // <
+        escaped = '&lt'
+        break
+
+      case 62: // >
+        escaped = '&gt'
+        break
+
+      default:
+        continue
+    }
+
+    if (lastIndex !== index) {
+      html += str.substring(lastIndex++, index)
+    }
+
+    html += escaped
+  }
+
+  return lastIndex !== index ? html : str.substring(lastIndex, index)
+}
+
+/**
+ * 处理动态属性，包括布尔属性以及SSR安全
+ * */
+export function renderDynamicAttr(key: string, value: any) {
+  if (isBooleanAttr(key)) {
+    // 对于布尔属性如果值为 false 则什么都不做
+    return value === false ? '' : ` ${key}`
+
+  } else if (isSSRSafeAttrName(key)) {
+    // 对于其他安全的属性，执行完整的渲染
+    // 对于属性值，我们需要对它执行 HTML 转义操作
+    return value === '' ? ` ${key}`
+      : `${key}="${decodeHTML(value)}"`
+
+  } else if (key === 'class' || key === 'style') {
+    // 处理 class 和 style
+    return ` ${key}=${normalize(value)}`
+  } else {
+    // 跳过不安全的属性，并打印警告信息
+    console.warn(
+      `[server-renderer] Skipped rendering unsafe attribute name: ${key}`
+    )
+    return ''
+  }
+
+}
+
+
+

@@ -1,5 +1,6 @@
 import { Container, Renderer, VNode } from '../../types/renderer'
 import { patch, unmount } from './patch'
+import { hydrateNode } from './hydrate'
 
 // /**
 //  * 根据组件虚拟 DOM 树构建真实的 DOM 树
@@ -28,7 +29,12 @@ export function createRenderer(): Renderer {
     container._vnode = vnode
   }
 
+  function hydrate(vnode: VNode, container: Container) {
+    hydrateNode(container.firstChild, vnode, container)
+  }
+
   return {
-    render
+    render,
+    hydrate
   }
 }
