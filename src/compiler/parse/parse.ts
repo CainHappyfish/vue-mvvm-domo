@@ -1,6 +1,6 @@
 import { AstNode, parseCtx, token } from '../../../types/compiler'
 import { TextModes } from './ast'
-import { parseCDATA, parseComment, parseElement, parseInterpolation, parseText } from './parseUtils'
+import { parseComment, parseElement, parseInterpolation, parseText } from './parseUtils'
 
 /**
  * 状态机状态
@@ -235,11 +235,11 @@ export function parse(templateStr: string): AstNode {
  * */
 export function parseChildren(ctx: parseCtx, ancestors: AstNode[]) {
   // 定义数组存储子节点
-  let nodes: AstNode[] = []
+  let nodes: Array<any> = []
   const { mode, source } = ctx
 
   while(!isEnd(ctx, ancestors)) {
-    let node: AstNode
+    let node: any
     // DATA RCDATA 模式才支持插值节点的解析
     if (mode === TextModes.DATA || mode === TextModes.RCDATA) {
       // 只有 DATA 模式才支持标签节点解析
@@ -250,7 +250,7 @@ export function parseChildren(ctx: parseCtx, ancestors: AstNode[]) {
             node = parseComment(ctx)
           } else if (source.startsWith('<![CDATA[')) {
             // CDATA
-            node = parseCDATA(ctx, ancestors)
+            // node = parseCDATA(ctx, ancestors)
           }
         }
       } else if (source[1] === '/') {
