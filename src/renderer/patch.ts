@@ -121,7 +121,7 @@ export function patch(oldNode: VNode | KeepAliveVNode | undefined, newNode: VNod
     
     else {
       // 旧节点存在，更新Fragment的子节点
-      patchChild(oldNode, newNode, container)
+      patchChildren(oldNode, newNode, container)
     }
   }
 }
@@ -176,24 +176,60 @@ export function patchElement(oldNode: VNode, newNode: VNode) {
   const el = newNode.el = oldNode.el as Container
   const oldProps = oldNode.props
   const newProps = newNode.props
-  // 更新props
-  for (const key in newProps) {
-    if (newProps[key] !== oldProps[key]) {
-      patchProps(el, key, oldProps[key], newProps[key])
+
+  // 靶向更新
+  if (newNode.PatchFlag) {
+    const flag = newNode.PatchFlag
+    if (flag === 1) {
+      // 更新 Text
+    } else if(flag === 2) {
+      // 更新 class
+    } else if (flag === 3) {
+      // 更新style
     }
-  }
-  // 将旧Props中不存在于新Props中的属性去掉
-  for (const key in oldProps) {
-    if (!(key in newProps)) {
-      patchProps(el, key, oldProps[key], null)
+
+  } else {
+    // 全量更新props
+    for (const key in newProps) {
+      if (newProps[key] !== oldProps[key]) {
+        patchProps(el, key, oldProps[key], newProps[key])
+      }
+    }
+    // 将旧Props中不存在于新Props中的属性去掉
+    for (const key in oldProps) {
+      if (!(key in newProps)) {
+        patchProps(el, key, oldProps[key], null)
+      }
     }
   }
 
-  // 更新子节点
-  patchChild(oldNode, newNode, el)
+
+  if (newNode.dynamicChildren) {
+    // 只更新动态节点
+    patchBlockChildren(oldNode, newNode)
+  } else {
+    // 更新子节点
+    patchChildren(oldNode, newNode, el)
+  }
+
 }
 
-export function patchChild(oldNode: VNode, newNode: VNode, el: Container) {
+/**
+ * 更新动态节点
+ * */
+export function patchBlockChildren(oldNode: VNode, newNode: VNode) {
+  for (let i = 0; newNode.dynamicChildren && i < newNode.dynamicChildren.length ; i++) {
+    if (oldNode.dynamicChildren) {
+      patchElement(oldNode.dynamicChildren[i], newNode.dynamicChildren[i])
+    } else {
+      console.error("Block does not exist.")
+      break
+    }
+  }
+}
+
+
+export function patchChildren(oldNode: VNode, newNode: VNode, el: Container) {
   /* 判断新子节点的类型是否为文字节点 */
   if (typeof newNode.children === 'string') {
     // 旧子节点的类型有三种：没有子节点、文本子节点、一组子节点

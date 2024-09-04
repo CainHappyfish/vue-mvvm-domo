@@ -4,8 +4,6 @@ import { keepAlive, teleport, transition } from '../src/components/components'
 export type Renderer = {
   render: (vnode: VNode, container: Container) => any
 }
-// export function renderer: (vNode: VNode, container: Container) => unknown
-
 
 /**
  * 虚拟 DOM 节点
@@ -15,22 +13,53 @@ export interface VNode {
   type: string | componentOptions | FuncComponent | keepAlive | teleport
   props: Record<symbol | string, any>
   children: string | Array<VNode>
+
   /**
    * DOM属性，可以是HTML元素容器，文本节点以及注释
    */
   el: Container | Text | Comment
+
   /**
    * 唯一标识
    * */
   key: string | number | symbol | undefined
+
   /**
    * 组件
    * */
   component?: ComponentInstance
+
   /**
    * transition
    * */
   transition?: transition
+
+  /**
+   * 动态子节点组
+   * */
+  dynamicChildren?: Array<DynamicNode>
+
+  /**
+   * 补丁标志
+   * */
+  PatchFlag?: number
+}
+
+export interface Block {
+
+  tag: string
+  props: Record<symbol | string, any>
+  children: string | Array<VNode>
+  key: string | number
+  /**
+   * 动态子节点组
+   * */
+  dynamicChildren?: Array<DynamicNode>
+
+  /**
+   * 补丁标志
+   * */
+  PatchFlag?: number
 }
 
 /**
