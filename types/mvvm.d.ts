@@ -67,12 +67,12 @@ export interface cainVm {
   /**
    * 解析指令
    * */
-  $compile: VmCompiler | undefined
+  $compile: Compiler | undefined
 
   /**
    * 渲染函数
    * */
-  // $render: Function | undefined
+  $render: Function | undefined
 
   /**
    * 渲染器

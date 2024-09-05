@@ -19,7 +19,7 @@ export class cApp implements cainVm {
 
   $template: string | undefined
 
-  // $render: Function
+  $render: Function
 
   // $renderer: Renderer
 

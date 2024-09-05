@@ -235,30 +235,6 @@ export interface parseCtx {
 
 }
 
-// /**
-//  * 标签节点
-//  * */
-// export interface tagNode {
-//
-//   type: 'Element',
-//
-//   /**
-//    * 标签名称
-//    * */
-//   tag: string
-//   /**
-//    * 标签属性
-//    * */
-//   props: Array<any>,
-//   /**
-//    * 子节点
-//    * */
-//   children: Array<tagNode>,
-//   /**
-//    * 是否自闭合
-//    * */
-//   isSelfClosing: boolean
-// }
 
 
 
