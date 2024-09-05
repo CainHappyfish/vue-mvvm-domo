@@ -49,7 +49,7 @@ export interface VNode {
 export interface Block {
 
   tag: string
-  props: Record<symbol | string, any>
+  props: Record<symbol | string, any> | null
   children: string | Array<VNode>
   key: string | number
   /**

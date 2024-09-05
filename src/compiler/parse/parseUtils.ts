@@ -52,14 +52,15 @@ const CCR_REPLACEMENTS = {
  * 标签解析
  * */
 export function parseElement(context: parseCtx, ancestors: AstNode[]) {
+
   const element = parseTag(context) as AstNode
-  if (element.isSelfClosing) return element
+  if (element?.isSelfClosing) return element
 
   // 切换到正确的文本模式
-  if (element.tag === 'textarea' || element.tag ==='title') {
+  if (element?.tag === 'textarea' || element?.tag ==='title' ) {
     // 解析得到的标签是 <textarea> 或 <title> 切换RCDATA模式
     context.mode = TextModes.RCDATA
-  } else if (/style | xmp | iframe | noembed | noframes | noscipt/.test(element.tag as string)) {
+  } else if (/style | xmp | iframe | noembed | noframes | noscipt/.test(element?.tag as string)) {
     // 上述情况切换 RAWTEXT
     context.mode = TextModes.RAWTEXT
   } else {
@@ -150,7 +151,7 @@ export function parseInterpolation(context: parseCtx) {
  * */
 export function parseText(context: parseCtx) {
   // endIndex为文本内容结尾索引
-  // 默认将整个莫欧版剩余内容都作为文本内容
+  // 默认将整个模板剩余内容都作为文本内容
   let endIndex = context.source.length
   // 寻找 <
   const ltIndex = context.source.indexOf('<')
@@ -168,6 +169,7 @@ export function parseText(context: parseCtx) {
   }
 
   const content = context.source.slice(0, endIndex)
+  context.advanceBy(endIndex)
 
   return {
     type: 'Text',
@@ -193,7 +195,7 @@ export function parseTag(context: parseCtx, type = 'start'): AstNode | undefined
   if (match) {
     const tag = match[1]
     // 清除正则表达式匹配的全部内容
-    advanceBy(match[0])
+    advanceBy(match[0].length)
     advanceSpaces()
 
     // 获取props
@@ -213,10 +215,11 @@ export function parseTag(context: parseCtx, type = 'start'): AstNode | undefined
       isSelfClosing: isSelfClosing
     }
 
-  } else {
-    console.error("tag does not match.")
-    return
   }
+  // else {
+  //   console.error("tag does not match.")
+  //   return
+  // }
 }
 
 /**
@@ -231,7 +234,7 @@ export function parseAttributes(context: parseCtx) {
   while (!context.source.startsWith('>') &&
         !context.source.startsWith('/>')) {
     // 正则匹配名称
-    const match = /^[\t\r\n\f />][^\t\r\n\f />=]*/.exec(context.source)
+    const match = /^[a-zA-Z\t\r\n\f />][^\t\r\n\f />=]*/.exec(context.source)
 
     if (match) {
       // 获取属性名称
@@ -279,6 +282,7 @@ export function parseAttributes(context: parseCtx) {
           advanceBy(value.length)
         } else {
           console.error(`${context.source} can not match.`)
+          return
         }
 
       }
@@ -295,6 +299,7 @@ export function parseAttributes(context: parseCtx) {
 
     } else {
       console.error(`${context.source} can not match.`)
+      return
     }
   }
 

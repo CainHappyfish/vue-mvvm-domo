@@ -223,7 +223,7 @@ export function parse(templateStr: string): AstNode {
 
   return {
     type: 'Root',
-    children: nodes
+    children: nodes,
   }
 
 }
@@ -238,12 +238,15 @@ export function parseChildren(ctx: parseCtx, ancestors: AstNode[]) {
   let nodes: Array<any> = []
   const { mode, source } = ctx
 
+  let count = 0
   while(!isEnd(ctx, ancestors)) {
     let node: any
+    if (count++ > 20) break
     // DATA RCDATA 模式才支持插值节点的解析
     if (mode === TextModes.DATA || mode === TextModes.RCDATA) {
       // 只有 DATA 模式才支持标签节点解析
       if (mode === TextModes.DATA && source[0] === '<') {
+        // console.log("template: ", ctx.source)
         if (source[1] === '!') {
           if (source.startsWith('<!--')) {
             // 注释
@@ -252,24 +255,35 @@ export function parseChildren(ctx: parseCtx, ancestors: AstNode[]) {
             // CDATA
             // node = parseCDATA(ctx, ancestors)
           }
+        } else if (/[a-z]/i.test(source[1])) {
+          // 标签元素
+          // console.log("isTag", /[a-z]/i.test(source[1]))
+          node = parseElement(ctx, ancestors)
+        } else {
+          console.error(`Invalid template ${ctx.source} at ${ctx.source[1]}.`)
         }
       } else if (source[1] === '/') {
         // 结束标签，报错
         console.error(`invalid tag ${ctx.source}`)
         continue
 
-      } else if (/a-z/i.test(source[1])) {
-        // 标签元素
-        node = parseElement(ctx, ancestors)
       } else if (source.startsWith('{{')) {
         // 解析插值
         node = parseInterpolation(ctx)
+      } else if (/[a-z]/i.test(ctx.source[0])) {
+        // 解析文本节点
+        console.log("current: ",ctx.source)
+        node = parseText(ctx)
+      } else {
+        console.error(`Invalid template ${ctx.source}`)
       }
     }
 
     // node 不存在，作为文本处理
     if (!node) {
       // 解析文本节点
+      console.log("current: ",ctx.source)
+
       node = parseText(ctx)
     }
 
@@ -278,13 +292,13 @@ export function parseChildren(ctx: parseCtx, ancestors: AstNode[]) {
 
   }
 
+  console.log(nodes)
   return nodes
 }
 
 function isEnd(ctx: parseCtx, ancestors: AstNode[]) {
   // 模板内容解析完毕后停止
   if (!ctx.source) return true
-
   // 获取父级标签节点
   const parent = ancestors[ancestors.length - 1]
   // 如果遇到结束标签，并且该标签与父级标签节点同名，则停止
