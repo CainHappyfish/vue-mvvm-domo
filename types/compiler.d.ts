@@ -212,6 +212,9 @@ export interface generateCtx {
 
 }
 
+/**
+ * 解析器上下文
+ * */
 export interface parseCtx {
   /**
    * 模板内容

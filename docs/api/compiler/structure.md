@@ -48,6 +48,28 @@ export class Compiler {
 
 # 解析器`parse`
 
+## `parseCtx`
+
+```typescript
+export interface parseCtx {
+  source: string
+  mode: string
+
+  advanceBy: (number) => any
+
+  advanceSpaces: () => any
+}
+```
+
+`parseCtx`用于定义解析器上下文。
+
+成员变量：
+
+- `source`：模板字符串
+- `mode`：解析器模式，根据当前文本模式确定
+- `advanceBy`：消费指定数量字符函数
+- `advanceSpaces`：消费空白字符串函数
+
 ## `AstNode`
 
 ```typescript
@@ -104,6 +126,54 @@ export interface parseCtx {
 ```
 
 # 转换器`transform`
+
+## `transformCtx`
+
+```typescript
+export interface transformCtx {
+  /**
+   * 转换函数组
+   * */
+  nodeTransforms: Array<Function>
+
+  /**
+   * 当前转换节点
+   * */
+  currentNode: AstNode | null
+
+  /**
+   * 当前节点在父节点的 children 中的位置索引
+   * */
+  childIndex: number
+
+  /**
+   * 当前节点父节点
+   * */
+  parent: AstNode | null
+
+  /**
+   * 节点替换函数
+   * */
+  replaceNode: (node: AstNode) => void
+
+  /**
+   * 节点移除函数
+   * */
+  removeNode: () => void
+
+}
+```
+
+`transformCtx`用于描述转换器上下文。
+
+成员变量：
+
+- `nodeTranforms`：转换函数组
+- `currentNode`：存储当前转换节点
+- `childIndex`：当前节点在父节点的 children 中的位置索引
+- `parent`：当前节点的父节点
+- `replaceNode`：节点替换函数
+- `removeNode`：节点移除函数
 
 ## `JsAstNode`
 

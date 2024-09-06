@@ -296,6 +296,9 @@ export function parseChildren(ctx: parseCtx, ancestors: AstNode[]) {
   return nodes
 }
 
+/**
+ * 判断模板是否解析完毕
+ * */
 function isEnd(ctx: parseCtx, ancestors: AstNode[]) {
   // 模板内容解析完毕后停止
   if (!ctx.source) return true
